@@ -1,0 +1,11 @@
+{
+  "smtpHost": "smtp.gmail.com",
+  "smtpPort": 587,
+  "smtpSecure": false,
+  "smtpUser": "kumarasutosh2014@gmail.com",
+  "smtpPass": "pyls dzas ipez frju",
+  "senderName": "Resume Automation System",
+  "senderEmail": "kumarasutosh2014@gmail.com",
+  "cronTime": "0 9 * * *",
+  "enableCron": true
+}

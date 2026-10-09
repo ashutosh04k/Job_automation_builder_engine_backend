@@ -1,0 +1,21 @@
+{
+  "name": "resume-cron-backend",
+  "version": "1.0.0",
+  "description": "Backend API, MongoDB storage, Cron Scheduler & Nodemailer Resume Tailor Engine",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mongoose": "^8.3.1",
+    "multer": "^2.4.0",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.13",
+    "pdfkit": "^0.20.2"
+  }
+}

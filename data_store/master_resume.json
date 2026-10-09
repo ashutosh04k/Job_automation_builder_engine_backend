@@ -1,0 +1,158 @@
+{
+  "_id": "6aba5d6488c5b11656412a80",
+  "fullName": "Ashutosh Kumar",
+  "email": "kumarasutosh2014@gmail.com",
+  "phone": "8521975695",
+  "location": "Gurgaon, Haryana",
+  "website": "https://ashutosh-portfolio-8x6q.onrender.com/",
+  "linkedin": "https://www.linkedin.com/in/ashutosh-kumar-sde",
+  "github": "https://github.com/ashutosh04k",
+  "title": "Software Developer | Full Stack Developer",
+  "summary": "Full Stack Developer with 3+ years of professional experience building scalable web applications using React.js, JavaScript, TypeScript, Node.js, Express.js, MongoDB, and SQL. Experienced in developing responsive, data-driven interfaces, REST APIs, reusable components, role-based systems, real-time features, and performance optimizations. Hands-on experience with AWS, Docker, GitHub Actions, Nginx, and CI/CD deployments. Strong problem-solving skills with experience taking features from requirements and UI development through backend integration, testing, deployment, and production support.\n",
+  "skills": [
+    {
+      "category": "Frontend",
+      "items": [
+        "React.js",
+        "Next.js",
+        "JavaScript",
+        "TypeScript",
+        "Redux",
+        "RTK Query",
+        "HTML5/CSS3",
+        "Tailwind CSS"
+      ],
+      "_id": "6aba61c6db71ddf93c6a4f61"
+    },
+    {
+      "category": "Backend & Databases",
+      "items": [
+        "Node.js",
+        "Express.js",
+        "REST APIs",
+        "WebSockets",
+        "MongoDB",
+        "SQL",
+        "Mongoose"
+      ],
+      "_id": "6aba61c6db71ddf93c6a4f62"
+    },
+    {
+      "category": "Cloud & DevOps",
+      "items": [
+        "AWS",
+        "EC2",
+        "S3",
+        "Docker",
+        "GitHub Actions",
+        "CI/CD",
+        "Nginx",
+        "Firebase"
+      ],
+      "_id": "6aba61c6db71ddf93c6a4f63"
+    },
+    {
+      "category": "Testing & Engineering",
+      "items": [
+        "Jest",
+        "React Testing Library",
+        "API Testing",
+        "RBAC",
+        "Performance Optimization",
+        "DSA",
+        "OOP"
+      ],
+      "_id": "6aba61c6db71ddf93c6a4f64"
+    }
+  ],
+  "experience": [
+    {
+      "company": "Togopool Pvt Ltd",
+      "role": "Software Developer",
+      "period": "July 2025 - Present",
+      "location": "India",
+      "highlights": [
+        "Engineered a full-stack order-import workflow mapping bulk data to application schemas, validating records, processing 200k+ orders per upload, and triggering route optimization for driver assignment.",
+        "Built real-time notification workflows using Firebase and Service Workers for push delivery and event-driven updates.",
+        "Integrated Stripe payment workflows into client booking systems, handling checkout, secure card capture, and payment confirmation.",
+        "Developed a full-stack corporate management panel for a taxi client, integrating booking workflows, driver operations, real-time tracking, RBAC, and backend APIs.",
+        "Implemented real-time driver and vehicle tracking using Google Maps with live location updates.",
+        "Improved navigation performance by 25% through asset splitting, route-level lazy loading, and optimized bundle delivery.",
+        "Contributed to an AI-powered code generation platform using LLM-driven scaffolding and component generation."
+      ],
+      "_id": "6aba61c6db71ddf93c6a4f65"
+    },
+    {
+      "company": "100acress",
+      "role": "Software Developer",
+      "period": "October 2024 - June 2025",
+      "location": "India",
+      "highlights": [
+        "Architected a CRM lead-management module with auto-allocation, status tracking, priority management, and automatic reassignment of inactive leads to upper management.",
+        "Developed Node.js REST APIs for CRM workflows, implementing lead allocation, status updates, and role-based business logic.",
+        "Automated deployments using GitHub Actions, Docker, and AWS, replacing manual releases with a CI/CD pipeline.",
+        "Managed application deployment on AWS EC2 with Nginx, configuring production environments and reverse-proxy routing.",
+        "Restructured client state using Redux and RTK Query, eliminating stale-cache issues and improving API data synchronization.",
+        "Optimized large datasets using virtualization and memoization, reducing application load times by 45%."
+      ],
+      "_id": "6aba61c6db71ddf93c6a4f66"
+    },
+    {
+      "company": "TawglUp",
+      "role": "Software Developer Intern",
+      "period": "January 2024 - September 2024",
+      "location": "India",
+      "highlights": [
+        "Built an interactive interview chat and dashboard using WebSockets for real-time messaging and client updates.",
+        "Developed a real-time notification service using WebSockets, implementing backend event handling for server-to-client interview status updates."
+      ],
+      "_id": "6aba61c6db71ddf93c6a4f67"
+    }
+  ],
+  "education": [
+    {
+      "degree": "Bachelor of Computer Science",
+      "institution": "J.I.E.T Jodhpur",
+      "period": "2019 - 2023",
+      "score": "SGPA: 8.5/10",
+      "_id": "6aba61c6db71ddf93c6a4f68"
+    }
+  ],
+  "projects": [
+    {
+      "name": "Real Estate SaaS Platform",
+      "technologies": [
+        "React.js",
+        "Node.js",
+        "Express.js",
+        "MongoDB",
+        "AWS"
+      ],
+      "highlights": [
+        "Built a full-stack property platform with React/Next.js, Node/Express, MongoDB, and dynamic admin management.",
+        "Implemented dynamic SEO configuration through an admin panel, managing metadata, slugs, and page settings without code changes.",
+        "Improved on-page SEO and load performance with server-side rendering, raising Lighthouse score from 27 to 73.",
+        "Deployed on AWS EC2 with Nginx reverse proxy, SSL, and caching, serving 10k+ users."
+      ],
+      "_id": "6aba61c6db71ddf93c6a4f69"
+    },
+    {
+      "name": "E-commerce Platform",
+      "technologies": [
+        "React.js",
+        "Node.js",
+        "Express.js",
+        "MongoDB"
+      ],
+      "highlights": [
+        "Built an e-commerce platform covering products, cart, checkout, and order management.",
+        "Developed backend APIs for product management and admin workflows across customer and admin applications.",
+        "Implemented payment, delivery tracking, and inventory management with synchronized stock updates."
+      ],
+      "_id": "6aba61c6db71ddf93c6a4f6a"
+    }
+  ],
+  "createdAt": "2026-09-28T12:28:20.074Z",
+  "updatedAt": "2026-09-28T12:47:02.095Z",
+  "__v": 1
+}
