@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
+import path from 'path';
 import targetRoutes from './routes/targetRoutes.js';
 import resumeRoutes from './routes/resumeRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
@@ -33,6 +34,18 @@ app.get('/api/health', (req, res) => {
 app.use('/api/targets', targetRoutes);
 app.use('/api/resume', resumeRoutes);
 app.use('/api/settings', settingsRoutes);
+
+// Serve Frontend Static Build in Production on Render
+const __dirname = path.resolve();
+const distPath = path.join(__dirname, '../frontend/dist');
+
+app.use(express.static(distPath));
+
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(distPath, 'index.html'));
+  }
+});
 
 // Start Server with Dual Persistence & Graceful Error Handling
 async function startServer() {

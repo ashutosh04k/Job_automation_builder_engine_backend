@@ -102,6 +102,13 @@ router.post('/:id/trigger', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Target not found' });
     }
     const outcome = await processTargetExecution(target, 'manual');
+    if (outcome.result && !outcome.result.success) {
+      return res.status(500).json({
+        success: false,
+        error: outcome.result.message || outcome.result.error || 'Failed to dispatch email',
+        outcome
+      });
+    }
     res.json({ success: true, message: `Email triggered for ${target.email}`, outcome });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

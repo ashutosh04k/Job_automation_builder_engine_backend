@@ -45,19 +45,37 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
       };
     }
 
-    // Create Nodemailer Transport
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      auth: {
-        user,
-        pass
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
-    });
+    // Create Nodemailer Transport with IPv4 enforcement and fast connection timeout
+    const isGmail = host === 'smtp.gmail.com' || user.endsWith('@gmail.com');
+    
+    const transporter = isGmail
+      ? nodemailer.createTransport({
+          service: 'gmail',
+          auth: {
+            user,
+            pass
+          },
+          family: 4, // Force IPv4 to prevent Render IPv6 hanging
+          connectionTimeout: 15000,
+          greetingTimeout: 15000,
+          socketTimeout: 20000
+        })
+      : nodemailer.createTransport({
+          host,
+          port,
+          secure: port === 465,
+          auth: {
+            user,
+            pass
+          },
+          tls: {
+            rejectUnauthorized: false
+          },
+          family: 4, // Force IPv4 to prevent Render IPv6 hanging
+          connectionTimeout: 15000,
+          greetingTimeout: 15000,
+          socketTimeout: 20000
+        });
 
     // Send Email with Attached PDF
     const info = await transporter.sendMail({
