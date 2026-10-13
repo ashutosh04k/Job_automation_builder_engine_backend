@@ -1,9 +1,60 @@
 import fs from 'fs';
 import path from 'path';
 import nodemailer from 'nodemailer';
-import * as Brevo from '@getbrevo/brevo';
+import { OAuth2Client } from 'google-auth-library';
 import { getSettings, getMasterResume } from './storageService.js';
 import { generateResumePDF } from './pdfService.js';
+
+/**
+ * Builds an RFC 2822 compliant MIME message string including HTML and Base64 PDF attachment.
+ */
+function buildMimeMessage({ from, to, replyTo, subject, htmlBody, pdfBuffer, pdfFilename }) {
+  const boundary = '----=_NextPart_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2);
+
+  const headers = [
+    `From: ${from}`,
+    `To: ${to}`,
+    replyTo ? `Reply-To: ${replyTo}` : '',
+    `Subject: =?utf-8?B?${Buffer.from(subject).toString('base64')}?=`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    ''
+  ].filter(Boolean).join('\r\n');
+
+  const htmlPart = [
+    `--${boundary}`,
+    'Content-Type: text/html; charset=UTF-8',
+    'Content-Transfer-Encoding: 7bit',
+    '',
+    htmlBody,
+    ''
+  ].join('\r\n');
+
+  const attachmentPart = [
+    `--${boundary}`,
+    `Content-Type: application/pdf; name="${pdfFilename}"`,
+    `Content-Disposition: attachment; filename="${pdfFilename}"`,
+    'Content-Transfer-Encoding: base64',
+    '',
+    pdfBuffer.toString('base64'),
+    ''
+  ].join('\r\n');
+
+  const closing = `--${boundary}--`;
+
+  return [headers, htmlPart, attachmentPart, closing].join('\r\n');
+}
+
+/**
+ * Encodes a string into URL-safe base64 (base64url) format required by Gmail API.
+ */
+function base64UrlEncode(str) {
+  return Buffer.from(str)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
 
 export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailoredData }) {
   try {
@@ -28,121 +79,85 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
       console.log(`[Email Service] Using Generated PDF Resume`);
     }
 
-    const brevoApiKey = process.env.BREVO_API_KEY || '';
+    const gmailClientId = process.env.GMAIL_CLIENT_ID || '';
+    const gmailClientSecret = process.env.GMAIL_CLIENT_SECRET || '';
+    const gmailRefreshToken = process.env.GMAIL_REFRESH_TOKEN || '';
 
-    // --- PRIMARY: Brevo HTTP API (no domain needed, just verify sender email) ---
-    if (brevoApiKey && brevoApiKey !== 'your_brevo_api_key_here') {
-      console.log(`[Email Service] Using Brevo HTTP API to send email to ${to}`);
+    // --- PRIMARY: Official Gmail REST API via OAuth2 (No SMTP port blocks, goes directly to Primary Inbox) ---
+    if (gmailClientId && gmailClientSecret && gmailRefreshToken) {
+      console.log(`[Email Service] Using Official Gmail REST API to send email to ${to}`);
 
-      const apiInstance = new Brevo.TransactionalEmailsApi();
-      apiInstance.authentications['api-key'].apiKey = brevoApiKey;
+      const oauth2Client = new OAuth2Client(
+        gmailClientId,
+        gmailClientSecret,
+        'https://developers.google.com/oauthplayground'
+      );
 
-      const sendSmtpEmail = new Brevo.SendSmtpEmail();
-      sendSmtpEmail.sender = { name: senderName, email: senderEmail };
-      sendSmtpEmail.to = [{ email: to }];
-      sendSmtpEmail.replyTo = { email: senderEmail, name: senderName };
-      sendSmtpEmail.subject = subject;
-      sendSmtpEmail.htmlContent = htmlContent;
-      sendSmtpEmail.attachment = [
-        {
-          name: 'Ashutosh_Kumar_Resume.pdf',
-          content: pdfBuffer.toString('base64')
-        }
-      ];
+      oauth2Client.setCredentials({
+        refresh_token: gmailRefreshToken
+      });
 
-      const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
+      const tokenResponse = await oauth2Client.getAccessToken();
+      const accessToken = tokenResponse?.token;
 
-      console.log(`[Email Service LIVE via Brevo] Sent email to ${to}. MessageId: ${result?.body?.messageId || 'sent'}`);
+      if (!accessToken) {
+        throw new Error('Failed to generate Google access token from refresh token.');
+      }
+
+      const mimeString = buildMimeMessage({
+        from: `${senderName} <${senderEmail}>`,
+        to,
+        replyTo: senderEmail,
+        subject,
+        htmlBody: htmlContent,
+        pdfBuffer,
+        pdfFilename: 'Ashutosh_Kumar_Resume.pdf'
+      });
+
+      const raw = base64UrlEncode(mimeString);
+
+      const sendRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ raw })
+      });
+
+      const sendData = await sendRes.json();
+
+      if (!sendRes.ok) {
+        throw new Error(sendData?.error?.message || 'Google Gmail API request failed.');
+      }
+
+      console.log(`[Email Service LIVE via Gmail API] Sent email to ${to}. MessageId: ${sendData.id}`);
       return {
         success: true,
         simulated: false,
-        messageId: result?.body?.messageId,
-        message: `🎉 Email + ${attachmentSource} sent successfully to ${to} via Brevo!`
+        messageId: sendData.id,
+        message: `🎉 Email + ${attachmentSource} sent successfully to ${to} via your Gmail account!`
       };
     }
 
-    // --- FALLBACK: Nodemailer SMTP (for local dev) ---
-    const host = process.env.SMTP_HOST || settings?.smtpHost || 'smtp.gmail.com';
-    const port = parseInt(process.env.SMTP_PORT || settings?.smtpPort || '587');
-    const user = (process.env.SMTP_USER || settings?.smtpUser || '').trim();
-    const rawPass = (process.env.SMTP_PASS || settings?.smtpPass || '').trim();
-    const pass = rawPass.replace(/\s+/g, '');
-
-    // No valid credentials at all — simulate
-    if (!user || !pass || rawPass === '••••••••••••') {
-      console.log(`[Email Service SIMULATION] Email + PDF (${attachmentSource}) prepared for: ${to}`);
-      return {
-        success: true,
-        simulated: true,
-        message: `Simulation Mode: No BREVO_API_KEY set. Email + ${attachmentSource} prepared for ${to}.`,
-        previewRecipient: to,
-        subject
-      };
-    }
-
-    console.log(`[Email Service] Using Nodemailer SMTP fallback to send email to ${to}`);
-
-    const isGmail = host === 'smtp.gmail.com' || user.endsWith('@gmail.com');
-
-    const transporter = isGmail
-      ? nodemailer.createTransport({
-          service: 'gmail',
-          auth: { user, pass },
-          family: 4,
-          connectionTimeout: 15000,
-          greetingTimeout: 15000,
-          socketTimeout: 20000
-        })
-      : nodemailer.createTransport({
-          host,
-          port,
-          secure: port === 465,
-          auth: { user, pass },
-          tls: { rejectUnauthorized: false },
-          family: 4,
-          connectionTimeout: 15000,
-          greetingTimeout: 15000,
-          socketTimeout: 20000
-        });
-
-    const info = await transporter.sendMail({
-      from: `"${senderName}" <${senderEmail}>`,
-      to,
-      replyTo: senderEmail,
-      subject,
-      html: htmlContent,
-      attachments: [
-        {
-          filename: 'Ashutosh_Kumar_Resume.pdf',
-          content: pdfBuffer,
-          contentType: 'application/pdf'
-        }
-      ]
-    });
-
-    console.log(`[Email Service LIVE via SMTP] Sent email with ${attachmentSource} to ${to}. Message ID: ${info.messageId}`);
+    // --- FALLBACK: Simulation Mode (if credentials not provided) ---
+    console.log(`[Email Service SIMULATION] No Gmail API credentials found. Prepared for: ${to}`);
     return {
       success: true,
-      simulated: false,
-      messageId: info.messageId,
-      message: `🎉 Email + ${attachmentSource} sent successfully to ${to}!`
+      simulated: true,
+      message: `Simulation Mode: Set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN on Render to send live emails.`,
+      previewRecipient: to,
+      subject
     };
 
   } catch (error) {
     console.error(`[Email Service ERROR] Failed to send email to ${to}:`, error.message);
 
-    let friendlyErrorMessage = error.message;
-    if (error.message?.includes('535-5.7.8') || error.message?.includes('Username and Password not accepted')) {
-      friendlyErrorMessage = 'Gmail rejected login credentials. Ensure 2FA & App Password are active.';
-    } else if (error.message?.includes('Connection timeout') || error.message?.includes('ETIMEDOUT')) {
-      friendlyErrorMessage = 'SMTP connection timed out. Set BREVO_API_KEY env variable on Render to bypass this.';
-    }
-
     return {
       success: false,
       simulated: false,
       error: error.message,
-      message: `Email sending failed: ${friendlyErrorMessage}`
+      message: `Email sending failed: ${error.message}`
     };
   }
 }
