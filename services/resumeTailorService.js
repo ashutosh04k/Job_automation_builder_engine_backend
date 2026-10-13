@@ -28,50 +28,30 @@ export function generateTailoredResume(masterResume, jobDescription = '', target
   // Match JD keywords case-insensitively
   const matched = defaultSkillsList.filter(skill => jdText.includes(skill.toLowerCase()));
 
-  // Combine matched skills first, followed by remaining default skills, ensuring strict uniqueness
-  const combinedSkillsSet = new Set();
-
-  // Add matched skills first for emphasis
-  matched.forEach(s => combinedSkillsSet.add(s));
-
-  // Add remaining base skills
-  defaultSkillsList.forEach(s => combinedSkillsSet.add(s));
-
-  const uniqueSkillsArray = Array.from(combinedSkillsSet);
-
-  // Format skills string cleanly without repetitive duplicates
-  let highlightedSkills = '';
-  if (uniqueSkillsArray.length > 1) {
-    const lastSkill = uniqueSkillsArray.pop();
-    highlightedSkills = uniqueSkillsArray.join(', ') + ', and ' + lastSkill;
-  } else {
-    highlightedSkills = uniqueSkillsArray.join('');
-  }
-
   const fullName = masterResume?.fullName || 'Ashutosh Kumar';
   const email = masterResume?.email || 'kumarasutosh2014@gmail.com';
-  const phone = masterResume?.phone || '+91 8521975695';
-  const title = targetRole || masterResume?.title || 'Software Developer | Frontend / Full Stack';
+  const phone = masterResume?.phone || '8521975695';
   const website = masterResume?.website || 'https://ashutosh-portfolio-8x6q.onrender.com/';
-  const linkedin = masterResume?.linkedin || 'https://www.linkedin.com/in/ashutosh-kumar-sde/';
+  const linkedin = masterResume?.linkedin || 'https://www.linkedin.com/in/ashutosh-kumar-sde';
   const github = masterResume?.github || 'https://github.com/ashutosh04k';
 
-  const tailoredSummary = `Results-driven Full Stack Developer with 3+ years of experience building scalable production-ready software, tailored for the ${title} role.`;
+  const tailoredSummary = `Results-driven Full Stack Developer with 3+ years of experience building scalable production-ready software.`;
 
-  // Plain personal-style email — avoids Gmail "Updates" tab, lands in Primary
-  // No fancy boxes, no background colors, no marketing-style containers
+  // Clean personal-style outreach email
   const htmlTemplate = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
-<body style="font-family: Arial, sans-serif; font-size: 15px; color: #1a1a1a; line-height: 1.7; max-width: 580px; margin: 0; padding: 20px;">
+<body style="font-family: Arial, sans-serif; font-size: 15px; color: #1a1a1a; line-height: 1.7; max-width: 600px; margin: 0; padding: 20px;">
 
-<p>Hi,</p>
+<p>Hi Sir/Maam,</p>
 
-<p>I'm <strong>${fullName}</strong>, a Full Stack Developer with 3+ years of experience. I came across your profile and wanted to reach out directly.</p>
+<p>I hope you're doing well.</p>
 
-<p>I have strong hands-on experience with <strong>${highlightedSkills}</strong>. I've built and shipped production applications across SaaS, real estate, logistics, and CRM platforms — focused on performance and clean architecture.</p>
+<p>My name is <strong>${fullName}</strong>, and I'm a Full Stack Developer with over 3 years of experience building and shipping production applications. I came across your profile and wanted to reach out directly.</p>
 
-<p>I'm currently open to <strong>Frontend / Full Stack Developer</strong> roles. I've attached my resume — would love to connect if there's a fit or if you know of any relevant openings.</p>
+<p>My core stack includes React.js, Next.js, TypeScript, Node.js, Express.js, and MongoDB, supported by hands-on experience with Redux, REST APIs, WebSockets, Tailwind CSS, Material UI, AWS, Docker, and CI/CD pipelines. I have delivered applications across SaaS, real estate, logistics, and CRM platforms, with a consistent focus on performance and clean, maintainable architecture.</p>
+
+<p>I'm currently exploring Frontend and Full Stack Developer opportunities. I've attached my resume for your reference and would welcome the chance to connect if there is a suitable opening on your team, or if you know of a relevant role elsewhere.</p>
 
 <p>
   LinkedIn: <a href="${linkedin}">${linkedin}</a><br>
@@ -79,8 +59,10 @@ export function generateTailoredResume(masterResume, jobDescription = '', target
   Portfolio: <a href="${website}">${website}</a>
 </p>
 
+<p>Thank you for your time and consideration.</p>
+
 <p>
-  Thanks,<br>
+  Best regards,<br>
   <strong>${fullName}</strong><br>
   ${phone} | <a href="mailto:${email}">${email}</a>
 </p>
@@ -92,6 +74,6 @@ export function generateTailoredResume(masterResume, jobDescription = '', target
     tailoredSummary,
     matchedKeywords: matched,
     htmlTemplate,
-    subjectLine: `Application for ${title} - ${fullName} (3+ Yrs Exp)`
+    subjectLine: `Full Stack Developer (3+ Years) | Open to Frontend / Full Stack Roles`
   };
 }
