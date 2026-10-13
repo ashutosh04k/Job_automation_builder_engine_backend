@@ -35,12 +35,15 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
       console.log(`[Email Service] Using Resend HTTP API to send email to ${to}`);
       const resend = new Resend(resendApiKey);
 
-      // Resend requires "from" to be a verified domain or onboarding@resend.dev for testing
+      // Use verified email/domain from env, fallback to Resend test address
       const fromAddress = process.env.RESEND_FROM_EMAIL || `${senderName} <onboarding@resend.dev>`;
+      // Always set reply-to as user's actual Gmail so recruiters can reply to you directly
+      const replyTo = process.env.SENDER_EMAIL || senderEmail;
 
       const { data, error } = await resend.emails.send({
         from: fromAddress,
         to: [to],
+        reply_to: replyTo,
         subject,
         html: htmlContent,
         attachments: [
