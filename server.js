@@ -35,17 +35,19 @@ app.use('/api/targets', targetRoutes);
 app.use('/api/resume', resumeRoutes);
 app.use('/api/settings', settingsRoutes);
 
-// Serve Frontend Static Build in Production on Render
+// Serve Frontend Static Build in Production on Render (only if dist exists)
 const __dirname = path.resolve();
 const distPath = path.join(__dirname, '../frontend/dist');
 
-app.use(express.static(distPath));
-
-app.get('*', (req, res) => {
-  if (!req.path.startsWith('/api')) {
-    res.sendFile(path.join(distPath, 'index.html'));
-  }
-});
+import fs from 'fs';
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+      res.sendFile(path.join(distPath, 'index.html'));
+    }
+  });
+}
 
 // Start Server with Dual Persistence & Graceful Error Handling
 async function startServer() {
@@ -62,8 +64,9 @@ async function startServer() {
 
   // Pre-load and sync targets on startup
   try {
-    const activeTargets = await getJobTargets();
-    console.log(`📦 Loaded ${activeTargets.length} job target(s) from database/disk store.`);
+    const result = await getJobTargets({ fetchAll: true });
+    const count = Array.isArray(result) ? result.length : (result?.data?.length ?? 0);
+    console.log(`📦 Loaded ${count} job target(s) from database/disk store.`);
   } catch (e) {
     console.warn('Target pre-load warning:', e.message);
   }
