@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import nodemailer from 'nodemailer';
-import { Resend } from 'resend';
+import * as Brevo from '@getbrevo/brevo';
 import { getSettings, getMasterResume } from './storageService.js';
 import { generateResumePDF } from './pdfService.js';
 
@@ -28,48 +28,36 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
       console.log(`[Email Service] Using Generated PDF Resume`);
     }
 
-    const resendApiKey = process.env.RESEND_API_KEY || '';
+    const brevoApiKey = process.env.BREVO_API_KEY || '';
 
-    // --- PRIMARY: Resend HTTP API (works on Render free tier) ---
-    if (resendApiKey && resendApiKey !== 'your_resend_api_key_here') {
-      console.log(`[Email Service] Using Resend HTTP API to send email to ${to}`);
-      const resend = new Resend(resendApiKey);
+    // --- PRIMARY: Brevo HTTP API (no domain needed, just verify sender email) ---
+    if (brevoApiKey && brevoApiKey !== 'your_brevo_api_key_here') {
+      console.log(`[Email Service] Using Brevo HTTP API to send email to ${to}`);
 
-      // Use verified email/domain from env, fallback to Resend test address
-      const fromAddress = process.env.RESEND_FROM_EMAIL || `${senderName} <onboarding@resend.dev>`;
-      // Always set reply-to as user's actual Gmail so recruiters can reply to you directly
-      const replyTo = process.env.SENDER_EMAIL || senderEmail;
+      const apiInstance = new Brevo.TransactionalEmailsApi();
+      apiInstance.authentications['api-key'].apiKey = brevoApiKey;
 
-      const { data, error } = await resend.emails.send({
-        from: fromAddress,
-        to: [to],
-        replyTo: replyTo,   // correct Resend SDK field (not reply_to)
-        subject,
-        html: htmlContent,
-        attachments: [
-          {
-            filename: 'Ashutosh_Kumar_Resume.pdf',
-            content: pdfBuffer.toString('base64')
-          }
-        ]
-      });
+      const sendSmtpEmail = new Brevo.SendSmtpEmail();
+      sendSmtpEmail.sender = { name: senderName, email: senderEmail };
+      sendSmtpEmail.to = [{ email: to }];
+      sendSmtpEmail.replyTo = { email: senderEmail, name: senderName };
+      sendSmtpEmail.subject = subject;
+      sendSmtpEmail.htmlContent = htmlContent;
+      sendSmtpEmail.attachment = [
+        {
+          name: 'Ashutosh_Kumar_Resume.pdf',
+          content: pdfBuffer.toString('base64')
+        }
+      ];
 
-      if (error) {
-        console.error(`[Resend ERROR] Failed to send email:`, error);
-        return {
-          success: false,
-          simulated: false,
-          error: error.message,
-          message: `Resend API error: ${error.message}`
-        };
-      }
+      const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
 
-      console.log(`[Email Service LIVE via Resend] Sent email to ${to}. ID: ${data.id}`);
+      console.log(`[Email Service LIVE via Brevo] Sent email to ${to}. MessageId: ${result?.body?.messageId || 'sent'}`);
       return {
         success: true,
         simulated: false,
-        messageId: data.id,
-        message: `🎉 Email + ${attachmentSource} sent successfully to ${to} via Resend!`
+        messageId: result?.body?.messageId,
+        message: `🎉 Email + ${attachmentSource} sent successfully to ${to} via Brevo!`
       };
     }
 
@@ -86,7 +74,7 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
       return {
         success: true,
         simulated: true,
-        message: `Simulation Mode: No RESEND_API_KEY set. Email + ${attachmentSource} prepared for ${to}.`,
+        message: `Simulation Mode: No BREVO_API_KEY set. Email + ${attachmentSource} prepared for ${to}.`,
         previewRecipient: to,
         subject
       };
@@ -120,6 +108,7 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
     const info = await transporter.sendMail({
       from: `"${senderName}" <${senderEmail}>`,
       to,
+      replyTo: senderEmail,
       subject,
       html: htmlContent,
       attachments: [
@@ -143,10 +132,10 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
     console.error(`[Email Service ERROR] Failed to send email to ${to}:`, error.message);
 
     let friendlyErrorMessage = error.message;
-    if (error.message.includes('535-5.7.8') || error.message.includes('Username and Password not accepted')) {
+    if (error.message?.includes('535-5.7.8') || error.message?.includes('Username and Password not accepted')) {
       friendlyErrorMessage = 'Gmail rejected login credentials. Ensure 2FA & App Password are active.';
-    } else if (error.message.includes('Connection timeout') || error.message.includes('ETIMEDOUT')) {
-      friendlyErrorMessage = 'SMTP connection timed out. Set RESEND_API_KEY env variable on Render to bypass this.';
+    } else if (error.message?.includes('Connection timeout') || error.message?.includes('ETIMEDOUT')) {
+      friendlyErrorMessage = 'SMTP connection timed out. Set BREVO_API_KEY env variable on Render to bypass this.';
     }
 
     return {
