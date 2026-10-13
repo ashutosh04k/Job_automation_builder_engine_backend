@@ -1,60 +1,9 @@
 import fs from 'fs';
 import path from 'path';
-import nodemailer from 'nodemailer';
+import MailComposer from 'nodemailer/lib/mail-composer/index.js';
 import { OAuth2Client } from 'google-auth-library';
 import { getSettings, getMasterResume } from './storageService.js';
 import { generateResumePDF } from './pdfService.js';
-
-/**
- * Builds an RFC 2822 compliant MIME message string including HTML and Base64 PDF attachment.
- */
-function buildMimeMessage({ from, to, replyTo, subject, htmlBody, pdfBuffer, pdfFilename }) {
-  const boundary = '----=_NextPart_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2);
-
-  const headers = [
-    `From: ${from}`,
-    `To: ${to}`,
-    replyTo ? `Reply-To: ${replyTo}` : '',
-    `Subject: =?utf-8?B?${Buffer.from(subject).toString('base64')}?=`,
-    'MIME-Version: 1.0',
-    `Content-Type: multipart/mixed; boundary="${boundary}"`,
-    ''
-  ].filter(Boolean).join('\r\n');
-
-  const htmlPart = [
-    `--${boundary}`,
-    'Content-Type: text/html; charset=UTF-8',
-    'Content-Transfer-Encoding: 7bit',
-    '',
-    htmlBody,
-    ''
-  ].join('\r\n');
-
-  const attachmentPart = [
-    `--${boundary}`,
-    `Content-Type: application/pdf; name="${pdfFilename}"`,
-    `Content-Disposition: attachment; filename="${pdfFilename}"`,
-    'Content-Transfer-Encoding: base64',
-    '',
-    pdfBuffer.toString('base64'),
-    ''
-  ].join('\r\n');
-
-  const closing = `--${boundary}--`;
-
-  return [headers, htmlPart, attachmentPart, closing].join('\r\n');
-}
-
-/**
- * Encodes a string into URL-safe base64 (base64url) format required by Gmail API.
- */
-function base64UrlEncode(str) {
-  return Buffer.from(str)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-}
 
 export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailoredData }) {
   try {
@@ -83,7 +32,7 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
     const gmailClientSecret = process.env.GMAIL_CLIENT_SECRET || '';
     const gmailRefreshToken = process.env.GMAIL_REFRESH_TOKEN || '';
 
-    // --- PRIMARY: Official Gmail REST API via OAuth2 (No SMTP port blocks, goes directly to Primary Inbox) ---
+    // --- PRIMARY: Official Gmail REST API via OAuth2 (Bypasses SMTP port blocks, Primary tab, Sent box) ---
     if (gmailClientId && gmailClientSecret && gmailRefreshToken) {
       console.log(`[Email Service] Using Official Gmail REST API to send email to ${to}`);
 
@@ -104,17 +53,29 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
         throw new Error('Failed to generate Google access token from refresh token.');
       }
 
-      const mimeString = buildMimeMessage({
-        from: `${senderName} <${senderEmail}>`,
+      // Compile 100% standard RFC 2822 MIME message with both text/html body and PDF attachment
+      const mail = new MailComposer({
+        from: `"${senderName}" <${senderEmail}>`,
         to,
         replyTo: senderEmail,
         subject,
-        htmlBody: htmlContent,
-        pdfBuffer,
-        pdfFilename: 'Ashutosh_Kumar_Resume.pdf'
+        html: htmlContent,
+        attachments: [
+          {
+            filename: 'Ashutosh_Kumar_Resume.pdf',
+            content: pdfBuffer,
+            contentType: 'application/pdf'
+          }
+        ]
       });
 
-      const raw = base64UrlEncode(mimeString);
+      const compiledBuffer = await mail.compile().build();
+
+      // Encode as URL-safe base64 (RFC 4648 base64url) required by Gmail API
+      const raw = compiledBuffer.toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
 
       const sendRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
         method: 'POST',
