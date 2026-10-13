@@ -1,17 +1,63 @@
 [
   {
-    "_id": "mv0jkd6m2gxrp",
+    "_id": "6acca56ec09f19b93f886915",
+    "email": "kumarasutosh2014@gmail.com",
+    "jobDescription": "testing",
+    "targetRole": "Senior Full Stack Engineer",
+    "companyName": "Tech Corp",
+    "cronSchedule": "0 9 * * *",
+    "isActive": true,
+    "lastSentAt": "2026-10-12T12:31:56.024Z",
+    "totalSentCount": 3,
+    "status": "active",
+    "createdAt": "2026-10-12T09:16:30.051Z",
+    "updatedAt": "2026-10-12T12:31:56.024Z",
+    "__v": 0
+  },
+  {
+    "_id": "6acc48fe233b1397ca706db4",
+    "email": "careers@efundzz.com",
+    "jobDescription": "Primary Responsibility:\nA React developer's primary responsibility is to design, build, and maintain dynamic, responsive, and user-friendly web interfaces using React.js. They create reusable components, manage application state with tools like Redux or Context API, and integrate frontend systems with APIs to ensure seamless data flow...\n\nJob Specification\nProficiency in JavaScript (ES6+), HTML5, and CSS3. - Expertise in React.js and its core principles (components, JSX, hooks, context API). - Familiarity with state management libraries like Redux, MobX, or Zustand. - Experience with RESTful APIs or GraphQL integration. - Knowledge of frontend build tools (Webpack, Vite, Babel) and package managers (npm/yarn). - Understanding of responsive design principles and mobile-first development. - Experience with CSS frameworks like Tailwind CSS, Material-UI, or Bootstrap. - Proficiency in optimizing React applications using lazy loading, code splitting, and minimizing re-renders. - Experience with testing frameworks like Jest, React Testing Library, or Cypress. - Experience in Agile or Scrum development methodologies. - Proficiency in using Git for version control and participating in CI/CD pipelines for deployment.",
+    "targetRole": "React Developer",
+    "companyName": "Efundzz",
+    "cronSchedule": "0 9 * * *",
+    "isActive": true,
+    "lastSentAt": "2026-10-12T02:44:34.913Z",
+    "totalSentCount": 1,
+    "status": "active",
+    "createdAt": "2026-10-12T02:42:06.039Z",
+    "updatedAt": "2026-10-12T02:44:34.913Z",
+    "__v": 0
+  },
+  {
+    "_id": "6ac8e57459d4e2f730eab3e6",
+    "email": "kumarasutosh2014@gmail.com",
+    "jobDescription": "sdfb",
+    "targetRole": "Senior Full Stack Engineer",
+    "companyName": "Tech Corp",
+    "cronSchedule": "0 9 * * *",
+    "isActive": true,
+    "lastSentAt": "2026-10-11T04:38:27.854Z",
+    "totalSentCount": 5,
+    "status": "active",
+    "createdAt": "2026-10-09T13:00:36.351Z",
+    "updatedAt": "2026-10-11T04:38:27.855Z",
+    "__v": 0
+  },
+  {
+    "_id": "6ac8e32c59d4e2f730eab3e3",
     "email": "hr@bqarlson.tech",
     "jobDescription": "Mern Stack Developer",
     "targetRole": "Mern Stack Developer",
     "companyName": "Bqarlson Software Technology",
     "cronSchedule": "0 9 * * *",
     "isActive": true,
+    "lastSentAt": "2026-10-11T04:40:28.906Z",
+    "totalSentCount": 5,
     "status": "active",
-    "totalSentCount": 2,
-    "lastSentAt": "2026-10-09T05:45:41.429Z",
-    "createdAt": "2026-10-09T05:45:25.438Z",
-    "updatedAt": "2026-10-09T05:45:41.430Z"
+    "createdAt": "2026-10-09T12:50:52.723Z",
+    "updatedAt": "2026-10-11T04:40:28.907Z",
+    "__v": 0
   },
   {
     "_id": "6abca1df998a22f9b8e6f5ab",
@@ -21,11 +67,11 @@
     "companyName": "EMPLAY",
     "cronSchedule": "0 9 * * *",
     "isActive": true,
-    "lastSentAt": "2026-10-09T05:45:45.742Z",
-    "totalSentCount": 2,
+    "lastSentAt": "2026-10-11T04:42:29.943Z",
+    "totalSentCount": 4,
     "status": "active",
     "createdAt": "2026-09-30T05:45:03.016Z",
-    "updatedAt": "2026-10-09T05:45:45.744Z",
+    "updatedAt": "2026-10-11T04:42:29.943Z",
     "__v": 0
   },
   {
@@ -36,11 +82,11 @@
     "companyName": "truscholar",
     "cronSchedule": "0 9 * * *",
     "isActive": true,
-    "lastSentAt": "2026-10-09T05:45:51.366Z",
-    "totalSentCount": 2,
+    "lastSentAt": "2026-10-11T04:44:30.902Z",
+    "totalSentCount": 4,
     "status": "active",
     "createdAt": "2026-09-30T05:37:55.257Z",
-    "updatedAt": "2026-10-09T05:45:51.368Z",
+    "updatedAt": "2026-10-11T04:44:30.902Z",
     "__v": 0
   },
   {
@@ -51,11 +97,11 @@
     "companyName": "Vrinda Techapps",
     "cronSchedule": "0 9 * * *",
     "isActive": true,
-    "lastSentAt": "2026-10-09T05:45:57.073Z",
-    "totalSentCount": 2,
+    "lastSentAt": "2026-10-11T04:46:31.860Z",
+    "totalSentCount": 4,
     "status": "active",
     "createdAt": "2026-09-30T05:34:09.741Z",
-    "updatedAt": "2026-10-09T05:45:57.074Z",
+    "updatedAt": "2026-10-11T04:46:31.860Z",
     "__v": 0
   },
   {
@@ -66,11 +112,11 @@
     "companyName": "vyavsaay",
     "cronSchedule": "0 9 * * *",
     "isActive": true,
-    "lastSentAt": "2026-10-09T05:46:01.609Z",
-    "totalSentCount": 2,
+    "lastSentAt": "2026-10-11T04:48:32.815Z",
+    "totalSentCount": 4,
     "status": "active",
     "createdAt": "2026-09-30T05:31:19.019Z",
-    "updatedAt": "2026-10-09T05:46:01.610Z",
+    "updatedAt": "2026-10-11T04:48:32.815Z",
     "__v": 0
   },
   {
@@ -81,11 +127,11 @@
     "companyName": "decabits",
     "cronSchedule": "0 9 * * *",
     "isActive": true,
-    "lastSentAt": "2026-10-09T05:46:07.060Z",
-    "totalSentCount": 7,
+    "lastSentAt": "2026-10-11T04:50:33.769Z",
+    "totalSentCount": 9,
     "status": "active",
     "createdAt": "2026-09-30T05:11:50.898Z",
-    "updatedAt": "2026-10-09T05:46:07.060Z",
+    "updatedAt": "2026-10-11T04:50:33.769Z",
     "__v": 0
   },
   {
@@ -96,11 +142,11 @@
     "companyName": "Couponpin",
     "cronSchedule": "0 9 * * *",
     "isActive": true,
-    "lastSentAt": "2026-10-09T05:46:13.088Z",
+    "lastSentAt": "2026-10-10T03:47:57.787Z",
     "totalSentCount": 3,
     "status": "active",
     "createdAt": "2026-09-30T05:11:50.811Z",
-    "updatedAt": "2026-10-09T05:46:13.090Z",
+    "updatedAt": "2026-10-10T03:47:57.787Z",
     "__v": 0
   },
   {
@@ -111,11 +157,11 @@
     "companyName": "shardatech",
     "cronSchedule": "0 9 * * *",
     "isActive": true,
-    "lastSentAt": "2026-10-09T05:46:17.791Z",
+    "lastSentAt": "2026-10-10T03:49:58.858Z",
     "totalSentCount": 3,
     "status": "active",
     "createdAt": "2026-09-29T06:11:53.242Z",
-    "updatedAt": "2026-10-09T05:46:17.792Z",
+    "updatedAt": "2026-10-10T03:49:58.858Z",
     "__v": 0
   },
   {
@@ -126,11 +172,11 @@
     "companyName": "Promanage It Solutions",
     "cronSchedule": "0 9 * * *",
     "isActive": true,
-    "lastSentAt": "2026-10-09T05:46:22.907Z",
+    "lastSentAt": "2026-10-10T03:51:59.928Z",
     "totalSentCount": 3,
     "status": "active",
     "createdAt": "2026-09-29T05:59:58.185Z",
-    "updatedAt": "2026-10-09T05:46:22.908Z",
+    "updatedAt": "2026-10-10T03:51:59.928Z",
     "__v": 0
   },
   {
@@ -141,11 +187,11 @@
     "companyName": "One Way cab",
     "cronSchedule": "0 9 * * *",
     "isActive": true,
-    "lastSentAt": "2026-10-09T05:46:27.476Z",
+    "lastSentAt": "2026-10-10T03:54:00.997Z",
     "totalSentCount": 3,
     "status": "active",
     "createdAt": "2026-09-29T05:57:55.381Z",
-    "updatedAt": "2026-10-09T05:46:27.477Z",
+    "updatedAt": "2026-10-10T03:54:00.998Z",
     "__v": 0
   },
   {
@@ -156,11 +202,11 @@
     "companyName": "Domis Tech",
     "cronSchedule": "0 9 * * *",
     "isActive": true,
-    "lastSentAt": "2026-10-09T05:46:34.075Z",
+    "lastSentAt": "2026-10-10T03:56:02.067Z",
     "totalSentCount": 3,
     "status": "active",
     "createdAt": "2026-09-29T05:35:13.152Z",
-    "updatedAt": "2026-10-09T05:46:34.077Z",
+    "updatedAt": "2026-10-10T03:56:02.067Z",
     "__v": 0
   },
   {
@@ -171,11 +217,11 @@
     "companyName": "Decabits",
     "cronSchedule": "0 9 * * *",
     "isActive": true,
-    "lastSentAt": "2026-10-09T05:46:38.376Z",
+    "lastSentAt": "2026-10-10T03:58:03.137Z",
     "totalSentCount": 3,
     "status": "active",
     "createdAt": "2026-09-29T05:21:44.076Z",
-    "updatedAt": "2026-10-09T05:46:38.377Z",
+    "updatedAt": "2026-10-10T03:58:03.138Z",
     "__v": 0
   }
 ]
