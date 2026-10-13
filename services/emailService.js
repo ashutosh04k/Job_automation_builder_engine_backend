@@ -43,7 +43,7 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
       const { data, error } = await resend.emails.send({
         from: fromAddress,
         to: [to],
-        reply_to: replyTo,
+        replyTo: replyTo,   // correct Resend SDK field (not reply_to)
         subject,
         html: htmlContent,
         attachments: [
