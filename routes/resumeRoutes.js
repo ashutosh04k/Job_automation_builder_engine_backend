@@ -2,8 +2,9 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
-import { getMasterResume, saveMasterResume, getEmailTemplate } from '../services/storageService.js';
+import { getMasterResume, saveMasterResume, getEmailTemplate, getJobTargetById } from '../services/storageService.js';
 import { generateTailoredResume } from '../services/resumeTailorService.js';
+import { generateResumePDF } from '../services/pdfService.js';
 import { requireAuth } from '../middleware/authMiddleware.js';
 import User from '../models/User.js';
 
@@ -166,6 +167,83 @@ router.post('/preview', async (req, res) => {
     );
 
     res.json({ success: true, data: preview });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST Generate and stream tailored ATS PDF resume directly
+router.post('/tailored-pdf', async (req, res) => {
+  try {
+    let { jobDescription, targetRole, companyName } = req.body;
+    const master = await getMasterResume(req.userId || null);
+
+    if (!targetRole || targetRole === 'Software Developer' || targetRole === 'Software Engineer' || targetRole === 'Software Developer | Frontend / Full Stack') {
+      const m = (jobDescription || '').match(/^Role:\s*(.+)$/m);
+      if (m && m[1].trim()) {
+        targetRole = m[1].trim();
+      }
+    }
+
+    if (!companyName || companyName === 'Target Company' || companyName === 'your company' || companyName === 'Tech Corp') {
+      const mc = (jobDescription || '').match(/^Company:\s*(.+)$/m);
+      if (mc && mc[1].trim()) {
+        companyName = mc[1].trim();
+      }
+    }
+
+    const pdfBuffer = await generateResumePDF(master, {
+      targetRole: targetRole || 'Software Developer',
+      companyName: companyName || '',
+      jobDescription: jobDescription || ''
+    });
+
+    const cleanName = (master?.fullName || 'Ashutosh_Kumar').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanRole = (targetRole || 'Resume').replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${cleanName}_${cleanRole}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET Stream tailored ATS PDF resume for a specific target
+router.get('/tailored-pdf/:targetId', async (req, res) => {
+  try {
+    const target = await getJobTargetById(req.params.targetId, req.userId || null);
+    if (!target) {
+      return res.status(404).json({ success: false, error: 'Job target not found' });
+    }
+
+    const master = await getMasterResume(req.userId || null);
+
+    let role = target.targetRole;
+    if (!role || role === 'Software Developer' || role === 'Software Engineer' || role === 'Software Developer | Frontend / Full Stack') {
+      const m = (target.jobDescription || '').match(/^Role:\s*(.+)$/m);
+      if (m && m[1].trim()) role = m[1].trim();
+    }
+    role = role || master?.title || 'Software Developer';
+
+    let company = target.companyName;
+    if (!company || company === 'Target Company' || company === 'your company' || company === 'Tech Corp') {
+      const mc = (target.jobDescription || '').match(/^Company:\s*(.+)$/m);
+      if (mc && mc[1].trim()) company = mc[1].trim();
+    }
+
+    const pdfBuffer = await generateResumePDF(master, {
+      targetRole: role,
+      companyName: company || '',
+      jobDescription: target.jobDescription || ''
+    });
+
+    const cleanName = (master?.fullName || 'Ashutosh_Kumar').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanRole = (role || 'Resume').replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${cleanName}_${cleanRole}.pdf"`);
+    res.send(pdfBuffer);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

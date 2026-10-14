@@ -38,14 +38,17 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
     let pdfBuffer = null;
     let attachmentSource = '';
 
-    if (customPdfPath && fs.existsSync(customPdfPath)) {
+    // Check if user explicitly chose static uploaded resume, otherwise default to Dynamic Tailored ATS Resume
+    const preferStatic = settings?.resumeMode === 'static' || userObj?.resumeMode === 'static';
+
+    if (preferStatic && customPdfPath && fs.existsSync(customPdfPath)) {
       pdfBuffer = fs.readFileSync(customPdfPath);
       attachmentSource = 'Custom Uploaded PDF Resume';
       console.log(`[Email Service] Using Custom Uploaded PDF Resume from ${customPdfPath}`);
     } else {
       pdfBuffer = await generateResumePDF(masterResume, tailoredData || {});
-      attachmentSource = 'Generated PDF Resume';
-      console.log(`[Email Service] Using Generated PDF Resume`);
+      attachmentSource = `Dynamic Tailored ATS Resume PDF (${tailoredData?.targetRole || 'Software Developer'})`;
+      console.log(`[Email Service] Generated & Attaching Dynamic Tailored ATS Resume PDF for ${tailoredData?.targetRole || 'Software Developer'}`);
     }
 
     const gmailClientId = userObj?.gmailClientId || settings?.gmailClientId || process.env.GMAIL_CLIENT_ID || '';
