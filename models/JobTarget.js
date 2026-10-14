@@ -15,7 +15,7 @@ const jobTargetSchema = new mongoose.Schema(
     },
     jobDescription: {
       type: String,
-      required: true,
+      default: '',
     },
     targetRole: {
       type: String,

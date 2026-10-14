@@ -163,7 +163,7 @@ export async function createJobTarget(data, userId = null) {
     _id: targetId,
     userId: userId ? userId.toString() : null,
     email: data.email,
-    jobDescription: data.jobDescription,
+    jobDescription: data.jobDescription || '',
     targetRole: data.targetRole || 'Software Engineer',
     companyName: data.companyName || 'Target Company',
     cronSchedule: '0 9 * * *',

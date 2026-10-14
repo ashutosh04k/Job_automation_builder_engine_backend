@@ -49,17 +49,17 @@ router.post('/', async (req, res) => {
   try {
     const { email, jobDescription, targetRole, companyName } = req.body;
 
-    if (!email || !jobDescription) {
+    if (!email) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Both Email and Job Description are required.' 
+        error: 'Recipient Email is required.' 
       });
     }
 
     const userId = req.userId || null;
     const newTarget = await createJobTarget({
       email,
-      jobDescription,
+      jobDescription: (jobDescription || '').trim(),
       targetRole: targetRole || 'Software Engineer',
       companyName: companyName || 'Target Company'
     }, userId);
