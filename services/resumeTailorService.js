@@ -22,7 +22,17 @@ export function renderEmailTemplate(template, { masterResume, targetRole, compan
     }
   }
 
-  const rawSubject = template?.subject || `${role} | Open to Opportunities - ${name}`;
+  let rawSubject = template?.subject || '';
+  if (!rawSubject || rawSubject.trim() === 'Full Stack Developer (3+ Years) | Open to Frontend / Full Stack Roles') {
+    rawSubject = '{{role}} (3+ Years) | Open to {{role}} Roles';
+  }
+
+  // If subject still has legacy static role text, substitute targetRole
+  if (!rawSubject.includes('{{role}}') && role) {
+    rawSubject = rawSubject.replace(/Full Stack Developer/g, role);
+    rawSubject = rawSubject.replace(/Frontend \/ Full Stack/g, role);
+  }
+
   const rawBody = template?.body || '';
 
   // Replace placeholders in subject
@@ -111,7 +121,7 @@ export function generateTailoredResume(
   const github = masterResume?.github || '';
 
   const defaultTemplate = {
-    subject: `Full Stack Developer (3+ Years) | Open to Frontend / Full Stack Roles`,
+    subject: `{{role}} (3+ Years) | Open to {{role}} Roles`,
     body: `Hi Sir/Maam,
 
 I hope you're doing well.
@@ -120,7 +130,7 @@ My name is {{name}}, and I'm a Full Stack Developer with over 3 years of experie
 
 My core stack includes React.js, Next.js, TypeScript, Node.js, Express.js, and MongoDB, supported by hands-on experience with Redux, REST APIs, WebSockets, Tailwind CSS, Material UI, AWS, Docker, and CI/CD pipelines. I have delivered applications across SaaS, real estate, logistics, and CRM platforms, with a consistent focus on performance and clean, maintainable architecture.
 
-I'm currently exploring Frontend and Full Stack Developer opportunities. I've attached my resume for your reference and would welcome the chance to connect if there is a suitable opening on your team, or if you know of a relevant role elsewhere.
+I'm currently exploring {{role}} opportunities. I've attached my resume for your reference and would welcome the chance to connect if there is a suitable opening on your team, or if you know of a relevant role elsewhere.
 
 LinkedIn: {{linkedin}}
 GitHub: {{github}}

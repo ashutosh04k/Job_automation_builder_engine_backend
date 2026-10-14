@@ -17,10 +17,19 @@ export async function processTargetExecution(target, triggeredBy = 'cron') {
     const masterResume = await getMasterResume(userId);
     const emailTemplate = await getEmailTemplate(userId);
 
+    let role = target.targetRole;
+    if (!role || role === 'Software Developer' || role === 'Software Engineer' || role === 'Software Developer | Frontend / Full Stack') {
+      const m = (target.jobDescription || '').match(/^Role:\s*(.+)$/m);
+      if (m && m[1].trim()) {
+        role = m[1].trim();
+      }
+    }
+    role = role || masterResume?.title || 'Software Developer';
+
     const tailoredData = generateTailoredResume(
       masterResume,
       target.jobDescription,
-      target.targetRole || 'Software Developer | Frontend / Full Stack',
+      role,
       emailTemplate,
       target.companyName || ''
     );
