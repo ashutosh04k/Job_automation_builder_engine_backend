@@ -71,20 +71,41 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
       doc.font('Times-Roman').fontSize(9.5).fillColor('#000000').text(subtitle, { align: 'center' });
       doc.moveDown(0.08);
 
-      // --- 3. CONTACT ROW (Blue links for phone and URLs) ---
-      doc.font('Times-Roman').fontSize(9.2).fillColor('#000000');
-      doc.text('Gurgaon, Haryana | ', { align: 'center', continued: true })
-         .fillColor('#0000ff').text('+91 85219 75695', { link: 'tel:+918521975695', continued: true })
-         .fillColor('#000000').text(' | ', { continued: true })
-         .fillColor('#0000ff').text('Portfolio', { link: 'https://ashutosh-portfolio-8x6q.onrender.com/', continued: true })
-         .fillColor('#000000').text(' | ', { continued: true })
-         .fillColor('#0000ff').text('Mail', { link: 'mailto:kumarasutosh2014@gmail.com', continued: true })
-         .fillColor('#000000').text(' | ', { continued: true })
-         .fillColor('#0000ff').text('Linkedin', { link: 'https://www.linkedin.com/in/ashutosh-kumar-sde/', continued: true })
-         .fillColor('#000000').text(' | ', { continued: true })
-         .fillColor('#0000ff').text('Github', { link: 'https://github.com/ashutosh04k' });
+      // --- 3. CONTACT ROW (Properly centered horizontal layout with active blue hyperlinks) ---
+      const contactSegments = [
+        { text: 'Gurgaon, Haryana | ', color: '#000000' },
+        { text: '+91 85219 75695', color: '#0000ff', link: 'tel:+918521975695' },
+        { text: ' | ', color: '#000000' },
+        { text: 'Portfolio', color: '#0000ff', link: 'https://ashutosh-portfolio-8x6q.onrender.com/' },
+        { text: ' | ', color: '#000000' },
+        { text: 'Mail', color: '#0000ff', link: 'mailto:kumarasutosh2014@gmail.com' },
+        { text: ' | ', color: '#000000' },
+        { text: 'Linkedin', color: '#0000ff', link: 'https://www.linkedin.com/in/ashutosh-kumar-sde/' },
+        { text: ' | ', color: '#000000' },
+        { text: 'Github', color: '#0000ff', link: 'https://github.com/ashutosh04k' }
+      ];
 
-      doc.moveDown(0.12);
+      doc.font('Times-Roman').fontSize(9.2);
+      let totalContactWidth = 0;
+      contactSegments.forEach(s => {
+        totalContactWidth += doc.widthOfString(s.text);
+      });
+
+      let currentContactX = (doc.page.width - totalContactWidth) / 2;
+      const contactY = doc.y;
+
+      contactSegments.forEach(s => {
+        doc.font('Times-Roman').fontSize(9.2).fillColor(s.color);
+        doc.text(s.text, currentContactX, contactY, {
+          link: s.link || undefined,
+          continued: false,
+          lineBreak: false
+        });
+        currentContactX += doc.widthOfString(s.text);
+      });
+      doc.y = contactY + doc.currentLineHeight() + 2;
+
+      doc.moveDown(0.08);
 
       // Section Header (Uppercase Bold with thin 0.4pt solid black line)
       function renderSection(title) {
@@ -111,22 +132,23 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
         const startY = doc.y;
         
         doc.font('Times-Roman').fontSize(8.5).fillColor('#000000')
-           .text(bulletSymbol, left + 6, startY, { width: 10 });
+           .text(bulletSymbol, left + 6, startY, { width: 10, lineBreak: false });
 
         const textX = left + 15;
         const textWidth = width - 15;
         doc.x = textX;
         doc.y = startY;
 
-        const parts = text.split(/(\*\*.*?\*\*)/g);
+        const parts = text.split(/(\*\*.*?\*\*)/g).filter(p => p && p.length > 0);
         parts.forEach((p, idx) => {
           const isBold = p.startsWith('**') && p.endsWith('**');
           const clean = isBold ? p.slice(2, -2) : p;
           const isLast = idx === parts.length - 1;
-          doc.font(isBold ? 'Times-Bold' : 'Times-Roman').fontSize(8.5).fillColor('#000000')
-             .text(clean, { width: textWidth, continued: !isLast, lineGap: 0.8 });
+          doc.font(isBold ? 'Times-Bold' : 'Times-Roman').fontSize(8.5).fillColor('#000000');
+          doc.text(clean, { width: textWidth, continued: !isLast, lineGap: 0.8 });
         });
-        doc.moveDown(0.05);
+        const bulletEndY = doc.y;
+        doc.y = Math.max(bulletEndY, startY + doc.currentLineHeight()) + 1.2;
       }
 
       // =========================================================================
@@ -214,12 +236,14 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
           return (isMatched || isPrimary) ? `**${item}**` : item;
         }).join(' , ');
 
-        const y = doc.y;
-        doc.font('Times-Bold').fontSize(8.5).fillColor('#000000').text(label, left + 4, y, { width: 95 });
-        doc.x = left + 105;
-        doc.y = y;
+        const startRowY = doc.y;
+        doc.font('Times-Bold').fontSize(8.5).fillColor('#000000')
+           .text(label, left + 4, startRowY, { width: 95, lineBreak: false });
 
-        const parts = formattedText.split(/(\*\*.*?\*\*)/g);
+        doc.x = left + 105;
+        doc.y = startRowY;
+
+        const parts = formattedText.split(/(\*\*.*?\*\*)/g).filter(p => p && p.length > 0);
         parts.forEach((p, idx) => {
           const isBold = p.startsWith('**') && p.endsWith('**');
           const clean = isBold ? p.slice(2, -2) : p;
@@ -227,7 +251,9 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
           doc.font(isBold ? 'Times-Bold' : 'Times-Roman').fontSize(8.5).fillColor('#000000');
           doc.text(clean, { width: width - 105, continued: !isLast, lineGap: 0.8 });
         });
-        doc.moveDown(0.04);
+
+        const rowEndY = doc.y;
+        doc.y = Math.max(rowEndY, startRowY + doc.currentLineHeight()) + 1.5;
       });
 
       // =========================================================================
