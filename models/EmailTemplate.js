@@ -5,7 +5,7 @@ const emailTemplateSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true, index: true },
     subject: {
       type: String,
-      default: '{{role}} (3+ Years) | Open to {{role}} Roles'
+      default: 'Application for {{role}} at {{company}} || (3+ Years) | Open to {{role}} Roles'
     },
     body: {
       type: String,

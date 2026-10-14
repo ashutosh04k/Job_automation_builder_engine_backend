@@ -452,7 +452,7 @@ export async function getLogs(userId = null) {
 
 // --- DYNAMIC PER-USER EMAIL TEMPLATE STORAGE ---
 export async function getEmailTemplate(userId = null) {
-  const defaultSubject = '{{role}} (3+ Years) | Open to {{role}} Roles';
+  const defaultSubject = 'Application for {{role}} at {{company}} || (3+ Years) | Open to {{role}} Roles';
   const defaultBody = `Hi Sir/Maam,
 
 I hope you're doing well.
@@ -485,7 +485,8 @@ Best regards,
         await tpl.save();
       } else {
         let changed = false;
-        if (!tpl.subject || tpl.subject.trim() === 'Full Stack Developer (3+ Years) | Open to Frontend / Full Stack Roles' || !tpl.subject.includes('{{role}}')) {
+        // Only upgrade if subject is the legacy static string or empty
+        if (!tpl.subject || tpl.subject.trim() === 'Full Stack Developer (3+ Years) | Open to Frontend / Full Stack Roles') {
           tpl.subject = defaultSubject;
           changed = true;
         }

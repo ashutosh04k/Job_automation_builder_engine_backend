@@ -139,16 +139,30 @@ router.get('/download-pdf', (req, res) => {
 // POST Preview Tailored HTML Email Body (tenant-scoped)
 router.post('/preview', async (req, res) => {
   try {
-    const { jobDescription, targetRole, companyName } = req.body;
+    let { jobDescription, targetRole, companyName } = req.body;
     const master = await getMasterResume(req.userId || null);
     const template = await getEmailTemplate(req.userId || null);
+
+    if (!targetRole || targetRole === 'Software Developer' || targetRole === 'Software Engineer' || targetRole === 'Software Developer | Frontend / Full Stack') {
+      const m = (jobDescription || '').match(/^Role:\s*(.+)$/m);
+      if (m && m[1].trim()) {
+        targetRole = m[1].trim();
+      }
+    }
+
+    if (!companyName || companyName === 'Target Company' || companyName === 'your company' || companyName === 'Tech Corp') {
+      const mc = (jobDescription || '').match(/^Company:\s*(.+)$/m);
+      if (mc && mc[1].trim()) {
+        companyName = mc[1].trim();
+      }
+    }
 
     const preview = generateTailoredResume(
       master, 
       jobDescription || 'Full Stack Engineer Node.js React developer', 
       targetRole || 'Software Developer',
       template,
-      companyName || 'Target Company'
+      companyName || 'your company'
     );
 
     res.json({ success: true, data: preview });

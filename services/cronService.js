@@ -26,12 +26,21 @@ export async function processTargetExecution(target, triggeredBy = 'cron') {
     }
     role = role || masterResume?.title || 'Software Developer';
 
+    let company = target.companyName;
+    if (!company || company === 'Target Company' || company === 'your company' || company === 'Tech Corp') {
+      const mc = (target.jobDescription || '').match(/^Company:\s*(.+)$/m);
+      if (mc && mc[1].trim()) {
+        company = mc[1].trim();
+      }
+    }
+    company = company || 'your company';
+
     const tailoredData = generateTailoredResume(
       masterResume,
       target.jobDescription,
       role,
       emailTemplate,
-      target.companyName || ''
+      company
     );
 
     // Inject stealth tracking pixel on own domain (bypasses known tracker blocklists)

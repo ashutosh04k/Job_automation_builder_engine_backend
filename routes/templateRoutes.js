@@ -68,7 +68,7 @@ router.post('/preview', async (req, res) => {
  */
 router.post('/reset', async (req, res) => {
   try {
-    const defaultSubject = '{{role}} (3+ Years) | Open to {{role}} Roles';
+    const defaultSubject = 'Application for {{role}} at {{company}} || (3+ Years) | Open to {{role}} Roles';
     const defaultBody = `Hi Sir/Maam,
 
 I hope you're doing well.

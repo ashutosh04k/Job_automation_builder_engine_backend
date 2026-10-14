@@ -24,7 +24,7 @@ export function renderEmailTemplate(template, { masterResume, targetRole, compan
 
   let rawSubject = template?.subject || '';
   if (!rawSubject || rawSubject.trim() === 'Full Stack Developer (3+ Years) | Open to Frontend / Full Stack Roles') {
-    rawSubject = '{{role}} (3+ Years) | Open to {{role}} Roles';
+    rawSubject = 'Application for {{role}} at {{company}} || (3+ Years) | Open to {{role}} Roles';
   }
 
   // Replace any legacy static role text in subject
@@ -125,7 +125,7 @@ export function generateTailoredResume(
   const github = masterResume?.github || '';
 
   const defaultTemplate = {
-    subject: `{{role}} (3+ Years) | Open to {{role}} Roles`,
+    subject: `Application for {{role}} at {{company}} || (3+ Years) | Open to {{role}} Roles`,
     body: `Hi Sir/Maam,
 
 I hope you're doing well.
