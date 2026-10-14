@@ -46,6 +46,39 @@ const jobTargetSchema = new mongoose.Schema(
       enum: ['active', 'paused', 'error', 'completed'],
       default: 'active',
     },
+    // Email Open & Link Tracking Fields
+    isOpened: {
+      type: Boolean,
+      default: false,
+    },
+    openedAt: {
+      type: Date,
+      default: null,
+    },
+    lastOpenedAt: {
+      type: Date,
+      default: null,
+    },
+    openCount: {
+      type: Number,
+      default: 0,
+    },
+    clickedAt: {
+      type: Date,
+      default: null,
+    },
+    clickCount: {
+      type: Number,
+      default: 0,
+    },
+    lastOpenedIp: {
+      type: String,
+      default: '',
+    },
+    lastOpenedUserAgent: {
+      type: String,
+      default: '',
+    },
   },
   { timestamps: true }
 );

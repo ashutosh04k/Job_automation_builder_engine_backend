@@ -9,6 +9,7 @@ import resumeRoutes from './routes/resumeRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import templateRoutes from './routes/templateRoutes.js';
+import trackRoutes from './routes/trackRoutes.js';
 import { initCronService } from './services/cronService.js';
 import { getJobTargets, migrateOrphanRecordsToUser } from './services/storageService.js';
 import User from './models/User.js';
@@ -40,6 +41,7 @@ app.use('/api/targets', targetRoutes);
 app.use('/api/resume', resumeRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/template', templateRoutes);
+app.use('/api/track', trackRoutes);
 
 // Serve Frontend Static Build in Production on Render (only if dist exists)
 const __dirname = path.resolve();

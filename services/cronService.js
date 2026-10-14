@@ -25,10 +25,22 @@ export async function processTargetExecution(target, triggeredBy = 'cron') {
       target.companyName || ''
     );
 
+    // Inject stealth tracking pixel on own domain (bypasses known tracker blocklists)
+    const apiBase = process.env.API_BASE_URL || 'https://resume-backend-api-pvx4.onrender.com';
+    const trackingPixelUrl = `${apiBase}/api/track/open/${target._id}.png`;
+    const trackingPixelHtml = `<img src="${trackingPixelUrl}" width="1" height="1" alt="" style="display:block; width:1px; height:1px; border:0; margin:0; padding:0;" />`;
+
+    let trackedHtml = tailoredData.htmlTemplate || '';
+    if (trackedHtml.includes('</body>')) {
+      trackedHtml = trackedHtml.replace('</body>', `${trackingPixelHtml}</body>`);
+    } else {
+      trackedHtml += trackingPixelHtml;
+    }
+
     const result = await sendTailoredResumeEmail({
       to: target.email,
       subject: tailoredData.subjectLine,
-      htmlContent: tailoredData.htmlTemplate,
+      htmlContent: trackedHtml,
       tailoredData,
       userId
     });
