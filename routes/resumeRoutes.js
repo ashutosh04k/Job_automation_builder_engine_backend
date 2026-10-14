@@ -2,7 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
-import { getMasterResume, saveMasterResume } from '../services/storageService.js';
+import { getMasterResume, saveMasterResume, getEmailTemplate } from '../services/storageService.js';
 import { generateTailoredResume } from '../services/resumeTailorService.js';
 import { requireAuth } from '../middleware/authMiddleware.js';
 import User from '../models/User.js';
@@ -139,13 +139,16 @@ router.get('/download-pdf', (req, res) => {
 // POST Preview Tailored HTML Email Body (tenant-scoped)
 router.post('/preview', async (req, res) => {
   try {
-    const { jobDescription, targetRole } = req.body;
+    const { jobDescription, targetRole, companyName } = req.body;
     const master = await getMasterResume(req.userId || null);
+    const template = await getEmailTemplate(req.userId || null);
 
     const preview = generateTailoredResume(
       master, 
       jobDescription || 'Full Stack Engineer Node.js React developer', 
-      targetRole || 'Software Developer'
+      targetRole || 'Software Developer',
+      template,
+      companyName || 'Target Company'
     );
 
     res.json({ success: true, data: preview });

@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { 
   getJobTargets, 
   getMasterResume, 
+  getEmailTemplate,
   createLogEntry, 
   updateJobTarget 
 } from './storageService.js';
@@ -14,11 +15,14 @@ export async function processTargetExecution(target, triggeredBy = 'cron') {
   try {
     const userId = target.userId || null;
     const masterResume = await getMasterResume(userId);
+    const emailTemplate = await getEmailTemplate(userId);
 
     const tailoredData = generateTailoredResume(
       masterResume,
       target.jobDescription,
-      target.targetRole || 'Software Developer | Frontend / Full Stack'
+      target.targetRole || 'Software Developer | Frontend / Full Stack',
+      emailTemplate,
+      target.companyName || ''
     );
 
     const result = await sendTailoredResumeEmail({

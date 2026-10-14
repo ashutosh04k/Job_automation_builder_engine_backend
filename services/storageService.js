@@ -6,6 +6,7 @@ import MasterResume from '../models/MasterResume.js';
 import Settings from '../models/Settings.js';
 import LogEntry from '../models/LogEntry.js';
 import User from '../models/User.js';
+import EmailTemplate from '../models/EmailTemplate.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data_store');
 if (!fs.existsSync(DATA_DIR)) {
@@ -447,4 +448,67 @@ export async function getLogs(userId = null) {
     return logs.filter(l => l.userId && l.userId.toString() === userId.toString());
   }
   return logs;
+}
+
+// --- DYNAMIC PER-USER EMAIL TEMPLATE STORAGE ---
+export async function getEmailTemplate(userId = null) {
+  const defaultSubject = 'Full Stack Developer (3+ Years) | Open to Frontend / Full Stack Roles';
+  const defaultBody = `Hi Sir/Maam,
+
+I hope you're doing well.
+
+My name is {{name}}, and I'm a Full Stack Developer with over 3 years of experience building and shipping production applications. I came across your profile and wanted to reach out directly.
+
+My core stack includes React.js, Next.js, TypeScript, Node.js, Express.js, and MongoDB, supported by hands-on experience with Redux, REST APIs, WebSockets, Tailwind CSS, Material UI, AWS, Docker, and CI/CD pipelines. I have delivered applications across SaaS, real estate, logistics, and CRM platforms, with a consistent focus on performance and clean, maintainable architecture.
+
+I'm currently exploring Frontend and Full Stack Developer opportunities. I've attached my resume for your reference and would welcome the chance to connect if there is a suitable opening on your team, or if you know of a relevant role elsewhere.
+
+LinkedIn: {{linkedin}}
+GitHub: {{github}}
+Portfolio: {{portfolio}}
+
+Thank you for your time and consideration.
+
+Best regards,
+{{name}}
+{{phone}} | {{email}}`;
+
+  if (isMongoConnected() && userId) {
+    try {
+      let tpl = await EmailTemplate.findOne({ userId });
+      if (!tpl) {
+        tpl = new EmailTemplate({
+          userId,
+          subject: defaultSubject,
+          body: defaultBody
+        });
+        await tpl.save();
+      }
+      return tpl.toObject();
+    } catch (err) {
+      console.warn('Mongo EmailTemplate fetch warning:', err.message);
+    }
+  }
+
+  return { subject: defaultSubject, body: defaultBody };
+}
+
+export async function saveEmailTemplate(data, userId = null) {
+  const { subject, body } = data || {};
+  if (isMongoConnected() && userId) {
+    try {
+      let tpl = await EmailTemplate.findOne({ userId });
+      if (!tpl) {
+        tpl = new EmailTemplate({ userId, subject, body });
+      } else {
+        if (subject !== undefined) tpl.subject = subject;
+        if (body !== undefined) tpl.body = body;
+      }
+      await tpl.save();
+      return tpl.toObject();
+    } catch (err) {
+      console.warn('Mongo EmailTemplate save warning:', err.message);
+    }
+  }
+  return { subject, body };
 }
