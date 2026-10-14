@@ -483,10 +483,19 @@ Best regards,
           body: defaultBody
         });
         await tpl.save();
-      } else if (tpl.subject === 'Full Stack Developer (3+ Years) | Open to Frontend / Full Stack Roles') {
-        // Auto-upgrade legacy static subject to dynamic role matching
-        tpl.subject = defaultSubject;
-        await tpl.save();
+      } else {
+        let changed = false;
+        if (!tpl.subject || tpl.subject.trim() === 'Full Stack Developer (3+ Years) | Open to Frontend / Full Stack Roles' || !tpl.subject.includes('{{role}}')) {
+          tpl.subject = defaultSubject;
+          changed = true;
+        }
+        if (tpl.body && tpl.body.includes('I\'m currently exploring Frontend and Full Stack Developer opportunities.')) {
+          tpl.body = tpl.body.replace('I\'m currently exploring Frontend and Full Stack Developer opportunities.', 'I\'m currently exploring {{role}} opportunities.');
+          changed = true;
+        }
+        if (changed) {
+          await tpl.save();
+        }
       }
       return tpl.toObject();
     } catch (err) {

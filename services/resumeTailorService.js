@@ -27,13 +27,17 @@ export function renderEmailTemplate(template, { masterResume, targetRole, compan
     rawSubject = '{{role}} (3+ Years) | Open to {{role}} Roles';
   }
 
-  // If subject still has legacy static role text, substitute targetRole
-  if (!rawSubject.includes('{{role}}') && role) {
+  // Replace any legacy static role text in subject
+  if (role) {
     rawSubject = rawSubject.replace(/Full Stack Developer/g, role);
     rawSubject = rawSubject.replace(/Frontend \/ Full Stack/g, role);
   }
 
-  const rawBody = template?.body || '';
+  let rawBody = template?.body || '';
+  if (role) {
+    rawBody = rawBody.replace(/Frontend and Full Stack Developer/g, role);
+    rawBody = rawBody.replace(/Frontend and Full Stack/g, role);
+  }
 
   // Replace placeholders in subject
   const subjectLine = rawSubject
