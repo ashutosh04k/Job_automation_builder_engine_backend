@@ -5,13 +5,10 @@ import multer from 'multer';
 import { getMasterResume, saveMasterResume, getEmailTemplate, getJobTargetById } from '../services/storageService.js';
 import { generateTailoredResume } from '../services/resumeTailorService.js';
 import { generateResumePDF } from '../services/pdfService.js';
-import { requireAuth } from '../middleware/authMiddleware.js';
+import { requireAuth, optionalAuth } from '../middleware/authMiddleware.js';
 import User from '../models/User.js';
 
 const router = express.Router();
-
-// Enforce authentication on all resume routes
-router.use(requireAuth);
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
@@ -46,7 +43,7 @@ const upload = multer({
 });
 
 // GET Master Resume Data (tenant-scoped)
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
     const master = await getMasterResume(req.userId || null);
     res.json({ success: true, data: master });
@@ -56,7 +53,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST Save Master Resume Data (tenant-scoped)
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const updated = await saveMasterResume(req.body, req.userId || null);
     res.json({ success: true, message: 'Master resume profile updated', data: updated });
@@ -66,7 +63,7 @@ router.post('/', async (req, res) => {
 });
 
 // POST Upload Custom PDF Resume File (tenant-scoped)
-router.post('/upload-pdf', upload.single('resumePdf'), async (req, res) => {
+router.post('/upload-pdf', requireAuth, upload.single('resumePdf'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, error: 'No PDF file provided.' });
@@ -98,7 +95,7 @@ router.post('/upload-pdf', upload.single('resumePdf'), async (req, res) => {
 });
 
 // GET Custom PDF Status (tenant-scoped)
-router.get('/pdf-status', (req, res) => {
+router.get('/pdf-status', requireAuth, (req, res) => {
   try {
     const userPdf = req.userId ? path.join(UPLOADS_DIR, req.userId.toString(), 'my_resume.pdf') : null;
     const isOwner = req.user?.email === 'kumarasutosh2014@gmail.com';
@@ -123,7 +120,7 @@ router.get('/pdf-status', (req, res) => {
 });
 
 // GET Download/View Uploaded PDF (tenant-scoped)
-router.get('/download-pdf', (req, res) => {
+router.get('/download-pdf', requireAuth, (req, res) => {
   const userPdf = req.userId ? path.join(UPLOADS_DIR, req.userId.toString(), 'my_resume.pdf') : null;
   const isOwner = req.user?.email === 'kumarasutosh2014@gmail.com';
   const globalPdf = isOwner ? path.join(UPLOADS_DIR, 'my_resume.pdf') : null;
@@ -138,7 +135,7 @@ router.get('/download-pdf', (req, res) => {
 });
 
 // POST Preview Tailored HTML Email Body (tenant-scoped)
-router.post('/preview', async (req, res) => {
+router.post('/preview', optionalAuth, async (req, res) => {
   try {
     let { jobDescription, targetRole, companyName } = req.body;
     const master = await getMasterResume(req.userId || null);
@@ -173,7 +170,7 @@ router.post('/preview', async (req, res) => {
 });
 
 // POST Generate and stream tailored ATS PDF resume directly
-router.post('/tailored-pdf', async (req, res) => {
+router.post('/tailored-pdf', optionalAuth, async (req, res) => {
   try {
     let { jobDescription, targetRole, companyName } = req.body;
     const master = await getMasterResume(req.userId || null);
@@ -210,7 +207,7 @@ router.post('/tailored-pdf', async (req, res) => {
 });
 
 // GET Stream tailored ATS PDF resume for a specific target
-router.get('/tailored-pdf/:targetId', async (req, res) => {
+router.get('/tailored-pdf/:targetId', optionalAuth, async (req, res) => {
   try {
     const target = await getJobTargetById(req.params.targetId, req.userId || null);
     if (!target) {
