@@ -29,7 +29,8 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
       const userPdf = path.resolve(process.cwd(), 'uploads', userId.toString(), 'my_resume.pdf');
       if (fs.existsSync(userPdf)) customPdfPath = userPdf;
     }
-    if (!customPdfPath) {
+    // Only primary owner can fall back to the pre-existing global uploads/my_resume.pdf
+    if (!customPdfPath && (userObj?.email === 'kumarasutosh2014@gmail.com' || (!userId && !userObj))) {
       const globalPdf = path.resolve(process.cwd(), 'uploads', 'my_resume.pdf');
       if (fs.existsSync(globalPdf)) customPdfPath = globalPdf;
     }

@@ -100,12 +100,13 @@ router.post('/upload-pdf', upload.single('resumePdf'), async (req, res) => {
 router.get('/pdf-status', (req, res) => {
   try {
     const userPdf = req.userId ? path.join(UPLOADS_DIR, req.userId.toString(), 'my_resume.pdf') : null;
-    const globalPdf = path.join(UPLOADS_DIR, 'my_resume.pdf');
-    const activePdf = (userPdf && fs.existsSync(userPdf)) ? userPdf : (fs.existsSync(globalPdf) ? globalPdf : null);
+    const isOwner = req.user?.email === 'kumarasutosh2014@gmail.com';
+    const globalPdf = isOwner ? path.join(UPLOADS_DIR, 'my_resume.pdf') : null;
+    const activePdf = (userPdf && fs.existsSync(userPdf)) ? userPdf : (globalPdf && fs.existsSync(globalPdf) ? globalPdf : null);
 
     if (activePdf) {
       const stats = fs.statSync(activePdf);
-      const cleanName = (req.user?.name || 'Ashutosh_Kumar').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const cleanName = (req.user?.name || 'Resume').replace(/[^a-zA-Z0-9_-]/g, '_');
       res.json({
         hasCustomPdf: true,
         filename: `${cleanName}_Resume.pdf`,
@@ -123,14 +124,15 @@ router.get('/pdf-status', (req, res) => {
 // GET Download/View Uploaded PDF (tenant-scoped)
 router.get('/download-pdf', (req, res) => {
   const userPdf = req.userId ? path.join(UPLOADS_DIR, req.userId.toString(), 'my_resume.pdf') : null;
-  const globalPdf = path.join(UPLOADS_DIR, 'my_resume.pdf');
-  const activePdf = (userPdf && fs.existsSync(userPdf)) ? userPdf : (fs.existsSync(globalPdf) ? globalPdf : null);
+  const isOwner = req.user?.email === 'kumarasutosh2014@gmail.com';
+  const globalPdf = isOwner ? path.join(UPLOADS_DIR, 'my_resume.pdf') : null;
+  const activePdf = (userPdf && fs.existsSync(userPdf)) ? userPdf : (globalPdf && fs.existsSync(globalPdf) ? globalPdf : null);
 
   if (activePdf) {
     res.contentType('application/pdf');
     res.sendFile(activePdf);
   } else {
-    res.status(404).json({ success: false, error: 'No custom uploaded PDF found.' });
+    res.status(404).json({ success: false, error: 'No custom uploaded PDF found for this account.' });
   }
 });
 

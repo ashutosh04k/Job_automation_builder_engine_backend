@@ -49,6 +49,23 @@ export async function migrateOrphanRecordsToUser(userId) {
       await MasterResume.updateMany({ $or: [{ userId: { $exists: false } }, { userId: null }] }, { $set: { userId: userObjId } });
       await LogEntry.updateMany({ $or: [{ userId: { $exists: false } }, { userId: null }] }, { $set: { userId: userObjId } });
       await Settings.updateMany({ $or: [{ userId: { $exists: false } }, { userId: null }] }, { $set: { userId: userObjId } });
+
+      // Clean up non-primary tenant resumes that may have inherited owner's defaults
+      await MasterResume.updateMany(
+        {
+          userId: { $ne: userObjId },
+          github: 'https://github.com/ashutosh04k'
+        },
+        {
+          $set: {
+            phone: '',
+            location: '',
+            website: '',
+            linkedin: '',
+            github: ''
+          }
+        }
+      );
     }
 
     // Also migrate local disk JSON targets
@@ -276,23 +293,33 @@ export async function getMasterResume(userId = null) {
 
   if (isMongoConnected()) {
     try {
-      const query = userId ? { userId } : {};
-      let master = await MasterResume.findOne(query);
-      
-      // If user provided but has no resume document yet, create one
-      if (!master && userId) {
-        const user = await User.findById(userId);
-        master = new MasterResume({
-          userId,
-          fullName: user?.name || defaultMaster.fullName,
-          email: user?.email || defaultMaster.email,
-          title: defaultMaster.title,
-          summary: defaultMaster.summary,
-          skills: defaultMaster.skills
-        });
-        await master.save();
+      if (userId) {
+        let master = await MasterResume.findOne({ userId });
+        
+        // If user has no resume document yet, create a clean one for them
+        if (!master) {
+          const user = await User.findById(userId);
+          master = new MasterResume({
+            userId,
+            fullName: user?.name || '',
+            email: user?.email || '',
+            phone: '',
+            location: '',
+            website: '',
+            linkedin: '',
+            github: '',
+            title: 'Software Developer',
+            summary: '',
+            skills: []
+          });
+          await master.save();
+        }
+
+        return master.toObject();
       }
 
+      // Legacy fallback if no userId
+      let master = await MasterResume.findOne({});
       if (master) return master.toObject();
     } catch (err) {
       console.warn('Mongo MasterResume warning:', err.message);
@@ -303,14 +330,17 @@ export async function getMasterResume(userId = null) {
 }
 
 export async function saveMasterResume(data, userId = null) {
+  // Strip immutable fields from incoming update payload
+  const { _id, userId: ignoredUserId, __v, createdAt, updatedAt, ...cleanData } = data || {};
+
   if (isMongoConnected()) {
     try {
       const query = userId ? { userId } : {};
       let master = await MasterResume.findOne(query);
       if (!master) {
-        master = new MasterResume({ ...data, userId: userId || undefined });
+        master = new MasterResume({ ...cleanData, userId: userId || undefined });
       } else {
-        Object.assign(master, data);
+        Object.assign(master, cleanData);
       }
       await master.save();
       return master.toObject();
