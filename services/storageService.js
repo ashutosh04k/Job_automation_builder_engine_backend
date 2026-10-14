@@ -406,11 +406,15 @@ export async function createLogEntry(logData, userId = null) {
 export async function getLogs(userId = null) {
   if (isMongoConnected()) {
     try {
-      const query = userId ? { $or: [{ userId }, { userId: null }, { userId: { $exists: false } }] } : {};
+      const query = userId ? { userId } : {};
       return await LogEntry.find(query).sort({ createdAt: -1 }).limit(100);
     } catch (err) {
       console.warn('Mongo LogEntry fetch warning:', err.message);
     }
   }
-  return readJsonFile('logs', []);
+  const logs = readJsonFile('logs', []);
+  if (userId) {
+    return logs.filter(l => l.userId && l.userId.toString() === userId.toString());
+  }
+  return logs;
 }

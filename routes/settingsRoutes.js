@@ -1,13 +1,13 @@
 import express from 'express';
 import { getSettings, saveSettings, getLogs } from '../services/storageService.js';
 import { sendTailoredResumeEmail } from '../services/emailService.js';
-import { optionalAuth } from '../middleware/authMiddleware.js';
+import { requireAuth } from '../middleware/authMiddleware.js';
 import User from '../models/User.js';
 
 const router = express.Router();
 
-// Apply optional auth
-router.use(optionalAuth);
+// Enforce authentication on all settings routes
+router.use(requireAuth);
 
 // GET Settings (tenant-scoped)
 router.get('/', async (req, res) => {

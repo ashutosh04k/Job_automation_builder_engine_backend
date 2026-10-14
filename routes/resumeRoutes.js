@@ -4,13 +4,13 @@ import path from 'path';
 import multer from 'multer';
 import { getMasterResume, saveMasterResume } from '../services/storageService.js';
 import { generateTailoredResume } from '../services/resumeTailorService.js';
-import { optionalAuth } from '../middleware/authMiddleware.js';
+import { requireAuth } from '../middleware/authMiddleware.js';
 import User from '../models/User.js';
 
 const router = express.Router();
 
-// Apply optional auth to resume routes
-router.use(optionalAuth);
+// Enforce authentication on all resume routes
+router.use(requireAuth);
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');

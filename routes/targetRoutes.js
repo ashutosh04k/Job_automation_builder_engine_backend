@@ -7,12 +7,12 @@ import {
   getJobTargetById 
 } from '../services/storageService.js';
 import { processTargetExecution, executeDaily9AMCronJob } from '../services/cronService.js';
-import { optionalAuth } from '../middleware/authMiddleware.js';
+import { requireAuth } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// Apply optionalAuth to all target routes
-router.use(optionalAuth);
+// Enforce authentication on all target routes
+router.use(requireAuth);
 
 // GET targets with backend pagination & optional user scoping
 router.get('/', async (req, res) => {
