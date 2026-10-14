@@ -7,10 +7,14 @@ import {
   getJobTargetById 
 } from '../services/storageService.js';
 import { processTargetExecution, executeDaily9AMCronJob } from '../services/cronService.js';
+import { optionalAuth } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// GET targets with backend pagination
+// Apply optionalAuth to all target routes
+router.use(optionalAuth);
+
+// GET targets with backend pagination & optional user scoping
 router.get('/', async (req, res) => {
   try {
     const page = parseInt(req.query.page || '1', 10);
@@ -18,7 +22,8 @@ router.get('/', async (req, res) => {
     const search = req.query.search || '';
     const fetchAll = req.query.all === 'true';
 
-    const result = await getJobTargets({ page, limit, search, fetchAll });
+    const userId = req.userId || null;
+    const result = await getJobTargets({ page, limit, search, fetchAll }, userId);
 
     if (fetchAll) {
       return res.json({ success: true, count: result.length, data: result });
@@ -51,12 +56,13 @@ router.post('/', async (req, res) => {
       });
     }
 
+    const userId = req.userId || null;
     const newTarget = await createJobTarget({
       email,
       jobDescription,
       targetRole: targetRole || 'Software Engineer',
       companyName: companyName || 'Target Company'
-    });
+    }, userId);
 
     res.status(201).json({ 
       success: true, 
@@ -71,7 +77,8 @@ router.post('/', async (req, res) => {
 // PUT update target
 router.put('/:id', async (req, res) => {
   try {
-    const target = await updateJobTarget(req.params.id, req.body);
+    const userId = req.userId || null;
+    const target = await updateJobTarget(req.params.id, req.body, userId);
     if (!target) {
       return res.status(404).json({ success: false, error: 'Target not found' });
     }
@@ -84,7 +91,8 @@ router.put('/:id', async (req, res) => {
 // DELETE target
 router.delete('/:id', async (req, res) => {
   try {
-    const success = await deleteJobTarget(req.params.id);
+    const userId = req.userId || null;
+    const success = await deleteJobTarget(req.params.id, userId);
     if (!success) {
       return res.status(404).json({ success: false, error: 'Target not found' });
     }
@@ -97,7 +105,8 @@ router.delete('/:id', async (req, res) => {
 // POST trigger manual test send now
 router.post('/:id/trigger', async (req, res) => {
   try {
-    const target = await getJobTargetById(req.params.id);
+    const userId = req.userId || null;
+    const target = await getJobTargetById(req.params.id, userId);
     if (!target) {
       return res.status(404).json({ success: false, error: 'Target not found' });
     }

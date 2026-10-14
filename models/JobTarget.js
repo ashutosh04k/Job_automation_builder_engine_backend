@@ -2,6 +2,11 @@ import mongoose from 'mongoose';
 
 const jobTargetSchema = new mongoose.Schema(
   {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      index: true,
+    },
     email: {
       type: String,
       required: true,

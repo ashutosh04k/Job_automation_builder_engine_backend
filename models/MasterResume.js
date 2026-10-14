@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const masterResumeSchema = new mongoose.Schema(
   {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
     fullName: { type: String, default: 'Ashutosh Kumar' },
     email: { type: String, default: 'kumarasutosh2014@gmail.com' },
     phone: { type: String, default: '8521975695' },

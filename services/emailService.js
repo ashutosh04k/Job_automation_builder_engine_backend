@@ -2,23 +2,42 @@ import fs from 'fs';
 import path from 'path';
 import MailComposer from 'nodemailer/lib/mail-composer/index.js';
 import { OAuth2Client } from 'google-auth-library';
-import { getSettings, getMasterResume } from './storageService.js';
+import { getSettings, getMasterResume, isMongoConnected } from './storageService.js';
 import { generateResumePDF } from './pdfService.js';
+import User from '../models/User.js';
 
-export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailoredData }) {
+export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailoredData, userId = null }) {
   try {
-    const settings = await getSettings();
-    const masterResume = await getMasterResume();
+    const settings = await getSettings(userId);
+    const masterResume = await getMasterResume(userId);
 
-    const senderName = process.env.SENDER_NAME || settings?.senderName || 'Ashutosh Kumar';
-    const senderEmail = process.env.SENDER_EMAIL || settings?.senderEmail || 'kumarasutosh2014@gmail.com';
+    let userObj = null;
+    if (userId && isMongoConnected()) {
+      try {
+        userObj = await User.findById(userId);
+      } catch (e) {
+        console.warn('Could not fetch user for email sending:', e.message);
+      }
+    }
 
-    // Check if custom uploaded PDF resume exists
-    const customPdfPath = path.resolve(process.cwd(), 'uploads', 'my_resume.pdf');
+    const senderName = userObj?.senderName || settings?.senderName || masterResume?.fullName || process.env.SENDER_NAME || 'Ashutosh Kumar';
+    const senderEmail = userObj?.senderEmail || settings?.senderEmail || masterResume?.email || process.env.SENDER_EMAIL || 'kumarasutosh2014@gmail.com';
+
+    // Check if custom uploaded PDF resume exists for this specific user or global fallback
+    let customPdfPath = null;
+    if (userId) {
+      const userPdf = path.resolve(process.cwd(), 'uploads', userId.toString(), 'my_resume.pdf');
+      if (fs.existsSync(userPdf)) customPdfPath = userPdf;
+    }
+    if (!customPdfPath) {
+      const globalPdf = path.resolve(process.cwd(), 'uploads', 'my_resume.pdf');
+      if (fs.existsSync(globalPdf)) customPdfPath = globalPdf;
+    }
+
     let pdfBuffer = null;
     let attachmentSource = '';
 
-    if (fs.existsSync(customPdfPath)) {
+    if (customPdfPath && fs.existsSync(customPdfPath)) {
       pdfBuffer = fs.readFileSync(customPdfPath);
       attachmentSource = 'Custom Uploaded PDF Resume';
       console.log(`[Email Service] Using Custom Uploaded PDF Resume from ${customPdfPath}`);
@@ -28,13 +47,16 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
       console.log(`[Email Service] Using Generated PDF Resume`);
     }
 
-    const gmailClientId = process.env.GMAIL_CLIENT_ID || '';
-    const gmailClientSecret = process.env.GMAIL_CLIENT_SECRET || '';
-    const gmailRefreshToken = process.env.GMAIL_REFRESH_TOKEN || '';
+    const gmailClientId = userObj?.gmailClientId || settings?.gmailClientId || process.env.GMAIL_CLIENT_ID || '';
+    const gmailClientSecret = userObj?.gmailClientSecret || settings?.gmailClientSecret || process.env.GMAIL_CLIENT_SECRET || '';
+    const gmailRefreshToken = userObj?.gmailRefreshToken || settings?.gmailRefreshToken || process.env.GMAIL_REFRESH_TOKEN || '';
+
+    // Attachment filename formatted nicely per user
+    const cleanFilename = `${(senderName || 'Ashutosh_Kumar').replace(/[^a-zA-Z0-9_-]/g, '_')}_Resume.pdf`;
 
     // --- PRIMARY: Official Gmail REST API via OAuth2 (Bypasses SMTP port blocks, Primary tab, Sent box) ---
     if (gmailClientId && gmailClientSecret && gmailRefreshToken) {
-      console.log(`[Email Service] Using Official Gmail REST API to send email to ${to}`);
+      console.log(`[Email Service] Using Official Gmail REST API to send email to ${to} from ${senderEmail}`);
 
       const oauth2Client = new OAuth2Client(
         gmailClientId,
@@ -62,7 +84,7 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
         html: htmlContent,
         attachments: [
           {
-            filename: 'Ashutosh_Kumar_Resume.pdf',
+            filename: cleanFilename,
             content: pdfBuffer,
             contentType: 'application/pdf'
           }
@@ -106,7 +128,7 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
     return {
       success: true,
       simulated: true,
-      message: `Simulation Mode: Set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN on Render to send live emails.`,
+      message: `Simulation Mode: Set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN to send live emails.`,
       previewRecipient: to,
       subject
     };

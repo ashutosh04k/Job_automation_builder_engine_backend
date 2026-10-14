@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const settingsSchema = new mongoose.Schema(
   {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
     smtpHost: { type: String, default: 'smtp.gmail.com' },
     smtpPort: { type: Number, default: 587 },
     smtpSecure: { type: Boolean, default: false }, // true for 465, false for other ports

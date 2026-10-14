@@ -12,7 +12,8 @@ let cronTask = null;
 
 export async function processTargetExecution(target, triggeredBy = 'cron') {
   try {
-    const masterResume = await getMasterResume();
+    const userId = target.userId || null;
+    const masterResume = await getMasterResume(userId);
 
     const tailoredData = generateTailoredResume(
       masterResume,
@@ -24,22 +25,23 @@ export async function processTargetExecution(target, triggeredBy = 'cron') {
       to: target.email,
       subject: tailoredData.subjectLine,
       htmlContent: tailoredData.htmlTemplate,
-      tailoredData
+      tailoredData,
+      userId
     });
 
     await updateJobTarget(target._id, {
       lastSentAt: new Date().toISOString(),
       totalSentCount: (target.totalSentCount || 0) + 1
-    });
+    }, userId);
 
-    const log = await createLogEntry({
+    await createLogEntry({
       targetId: target._id,
       recipientEmail: target.email,
       jobDescriptionSnippet: (target.jobDescription || '').substring(0, 120) + '...',
       status: result.success ? (result.simulated ? 'simulated' : 'success') : 'failed',
       triggeredBy,
       details: result.message
-    });
+    }, userId);
 
     return {
       targetId: target._id,
@@ -57,7 +59,7 @@ export async function processTargetExecution(target, triggeredBy = 'cron') {
       status: 'failed',
       triggeredBy,
       details: err.message
-    });
+    }, target.userId || null);
     return { targetId: target._id, recipient: target.email, error: err.message };
   }
 }
@@ -65,9 +67,10 @@ export async function processTargetExecution(target, triggeredBy = 'cron') {
 export async function executeDaily9AMCronJob(triggeredBy = 'cron') {
   console.log(`[Cron Job 9:00 AM] Running daily resume dispatch task at ${new Date().toISOString()}`);
   
+  // Fetch all active targets across all registered users
   const allTargets = await getJobTargets({ fetchAll: true });
   const activeTargets = allTargets.filter(t => t.isActive);
-  console.log(`[Cron Job 9:00 AM] Found ${activeTargets.length} active job target(s)`);
+  console.log(`[Cron Job 9:00 AM] Found ${activeTargets.length} active job target(s) across all users`);
 
   const results = [];
   for (const target of activeTargets) {

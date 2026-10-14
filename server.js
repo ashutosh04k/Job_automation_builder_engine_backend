@@ -3,11 +3,14 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import path from 'path';
+import fs from 'fs';
 import targetRoutes from './routes/targetRoutes.js';
 import resumeRoutes from './routes/resumeRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
+import authRoutes from './routes/authRoutes.js';
 import { initCronService } from './services/cronService.js';
-import { getJobTargets } from './services/storageService.js';
+import { getJobTargets, migrateOrphanRecordsToUser } from './services/storageService.js';
+import User from './models/User.js';
 
 dotenv.config();
 
@@ -23,7 +26,7 @@ app.use(express.json({ limit: '10mb' }));
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'OK',
-    service: 'MERN Resume Automation Backend',
+    service: 'MERN Resume Automation Backend (Multi-Tenant)',
     cronSchedule: '0 9 * * * (9:00 AM Daily)',
     dbState: mongoose.connection.readyState === 1 ? 'MongoDB Atlas Connected' : 'Persistent Disk Storage (JSON)',
     timestamp: new Date()
@@ -31,6 +34,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // API Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/targets', targetRoutes);
 app.use('/api/resume', resumeRoutes);
 app.use('/api/settings', settingsRoutes);
@@ -39,7 +43,6 @@ app.use('/api/settings', settingsRoutes);
 const __dirname = path.resolve();
 const distPath = path.join(__dirname, '../frontend/dist');
 
-import fs from 'fs';
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
   app.get('*', (req, res) => {
@@ -57,6 +60,28 @@ async function startServer() {
       serverSelectionTimeoutMS: 10000 // 10 seconds for reliable Atlas connection
     });
     console.log('✅ MongoDB Database connected successfully.');
+
+    // Seed or locate primary admin account & run multi-tenant migration
+    try {
+      let primaryUser = await User.findOne({ email: 'kumarasutosh2014@gmail.com' });
+      if (!primaryUser) {
+        primaryUser = new User({
+          name: 'Ashutosh Kumar',
+          email: 'kumarasutosh2014@gmail.com',
+          password: process.env.PRIMARY_USER_PASSWORD || 'Ashutosh@2026',
+          role: 'admin',
+          senderName: 'Ashutosh Kumar',
+          senderEmail: 'kumarasutosh2014@gmail.com'
+        });
+        await primaryUser.save();
+        console.log('✅ Initialized primary admin account: kumarasutosh2014@gmail.com');
+      }
+
+      await migrateOrphanRecordsToUser(primaryUser._id);
+    } catch (migErr) {
+      console.warn('⚠️ Primary user seeding/migration notice:', migErr.message);
+    }
+
   } catch (err) {
     console.warn('⚠️ Could not connect to MongoDB Atlas immediately. Operating with persistent disk fallback.');
     console.warn(`Error: ${err.message}`);
@@ -66,7 +91,7 @@ async function startServer() {
   try {
     const result = await getJobTargets({ fetchAll: true });
     const count = Array.isArray(result) ? result.length : (result?.data?.length ?? 0);
-    console.log(`📦 Loaded ${count} job target(s) from database/disk store.`);
+    console.log(`📦 Loaded ${count} job target(s) across database/disk store.`);
   } catch (e) {
     console.warn('Target pre-load warning:', e.message);
   }
@@ -76,7 +101,7 @@ async function startServer() {
 
   const server = app.listen(PORT, () => {
     console.log(`=======================================================`);
-    console.log(`🚀 MERN Resume Server running on http://localhost:${PORT}`);
+    console.log(`🚀 Multi-Tenant AutoResume Server running on http://localhost:${PORT}`);
     console.log(`⏰ Daily Cron Job active: Scheduled for 9:00 AM Every Morning`);
     console.log(`=======================================================`);
   });
