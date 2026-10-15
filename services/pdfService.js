@@ -589,15 +589,15 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
           role: 'Software Developer',
           dates: 'July 2025 - Present',
           bullets: [
-            'Engineered a **full-stack order-import workflow** mapping bulk data to application schemas, validating records, surfacing errors, processing **200k+ orders/upload**, and triggering route optimization for driver assignment.',
-            'Orchestrated a **Real-time Notification** using **Firebase & Service Workers** for push delivery and event-driven updates.',
-            'Integrated **Stripe P.G** into client booking workflows, handling checkout, secure card capture, and payment confirmation.',
-            'Delivered a **Chat support system** for Dubai Emirates, enabling communication between Drivers, Pilots, and support teams.',
-            'Designed a **full-stack corporate management panel** for a taxi client, integrating booking workflows, driver operations, real-time tracking, RBAC, and backend APIs.',
-            'Implemented **real-time driver/vehicle tracking** using Google Maps with live location updates for Secure Express operations.',
-            'Configured driver operations with **RBAC**, shift scheduling, and push notifications for role-specific Gala workflows.',
-            'Optimized navigation performance by **25%** through asset splitting, route-level lazy loading, and optimized bundle delivery.',
-            'Contributing to an **AI-powered code generation platform** using **LLM-driven** scaffolding and component generation.'
+            'Engineered a **full-stack order-import workflow** that validates and maps bulk data to application schemas, processing **200k+ orders/upload** and triggering route optimization — replacing manual order entry and cutting driver-assignment turnaround for enterprise clients.',
+            'Shipped a **real-time notification system** using **Firebase & Service Workers**, giving drivers and dispatchers instant push updates and eliminating missed assignment alerts.',
+            'Integrated **Stripe** into client booking workflows (checkout, secure card capture, confirmation), enabling the company to onboard paying customers without a separate billing tool.',
+            'Delivered a **chat support system** for the Dubai Emirates deployment, connecting drivers, pilots, and support staff in one channel and reducing reliance on phone-based coordination.',
+            'Built a **corporate management panel** for a taxi client covering bookings, driver operations, live tracking, and **RBAC** — a deliverable that secured and retained the account.',
+            'Implemented **real-time driver/vehicle tracking** with Google Maps for Secure Express operations, giving operators live fleet visibility and faster incident response.',
+            'Configured role-specific driver workflows with **RBAC**, shift scheduling, and push notifications for the Gala client, letting ops teams manage shifts without engineering involvement.',
+            'Optimized navigation performance by **25%** through code splitting, route-level lazy loading, and bundle optimization, improving usability for drivers on low-end devices.',
+            'Contributing to an **AI-powered code generation platform** using **LLM-driven** scaffolding, aimed at reducing internal feature-development time.'
           ]
         },
         {
@@ -605,13 +605,13 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
           role: 'Software Developer',
           dates: 'Oct 2024 - June 2025',
           bullets: [
-            'Architected a **CRM lead-management** module with auto-allocation, status tracking, and priority management, automatically **returning inactive leads to upper management** after a defined period.',
-            'Developed **Node.js REST APIs** for CRM workflows, implementing lead allocation, status updates, role-based business logic.',
-            'Automated deployments using **GitHub Actions, Docker, and AWS**, replacing manual releases with a CI/CD pipeline.',
-            'Managed application deployment on **AWS EC2** with **Nginx**, configuring production environments and reverse-proxy routing.',
-            'Crafted pixel-accurate, **responsive React interfaces** from Figma specifications with keyboard navigation and ARIA labeling.',
-            'Restructured client state using **Redux and RTK Query**, eliminating stale-cache issues and improving API data synchronization.',
-            'Accelerated large datasets using **virtualization and memoization**, reducing application load times by **45%**.'
+            'Architected a **CRM lead-management** module with auto-allocation, status tracking, and priority handling that **escalates inactive leads to management** — ensuring no lead stalled with a single agent.',
+            'Developed **Node.js REST APIs** for lead allocation, status updates, and role-based business logic, powering the daily workflow of the entire sales team.',
+            'Automated deployments with **GitHub Actions, Docker, and AWS**, replacing manual releases with a CI/CD pipeline and cutting deployment time from hours to minutes.',
+            'Managed production deployment on **AWS EC2** with **Nginx** reverse-proxy routing, keeping a **10k+ user** property platform stable through peak traffic.',
+            'Delivered pixel-accurate, **responsive React interfaces** from Figma specs with keyboard navigation and ARIA labeling, improving accessibility and reducing design-QA cycles.',
+            'Restructured client state with **Redux and RTK Query**, eliminating stale-cache bugs that had been causing incorrect listing data for agents.',
+            'Accelerated large listing datasets with **virtualization and memoization**, reducing load times by **45%** and improving agent productivity on data-heavy screens.'
           ]
         },
         {
@@ -619,8 +619,11 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
           role: 'Software Developer - Intern',
           dates: 'Jan 2024 - Sep 2024',
           bullets: [
-            'Created an interactive interview **Chat system** , **Dashboard** using **WebSockets** for real-time messaging and client updates.',
-            'Established a **real-time notification service** using WebSockets, implementing **backend event handling** for server-to-client interview status updates.'
+            'Created an interactive interview **chat system** and **dashboard** over **WebSockets**, enabling recruiters and candidates to communicate live during interviews on the platform.',
+            'Established a **real-time notification service** with WebSocket-based **backend event handling**, so candidates and interviewers received instant status updates instead of polling or email.',
+            'Built an interview **scheduling UI** with calendar slots, **timezone handling**, and a **reusable component library** shared across candidate and recruiter dashboards, speeding up delivery of new screens.',
+            'Integrated **REST APIs** for interview scheduling, feedback, and reporting, with **error boundaries** and loading states for resilient UX.',
+            'Implemented **role-based dashboards** for candidates, interviewers, and coordinators with **permission-based access** and secure state management.',
           ]
         }
       ];
@@ -700,6 +703,18 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
       }
 
       const projectsData = [
+        {
+          title: 'AutoResume AI — Automated Job Pipeline & ATS Resume Engine',
+          tech: 'React.js, Node.js, Express, MongoDB, Chrome Extension (Manifest V3), AI/LLM, Cron Automation',
+          linkText: '(Live App)',
+          linkUrl: 'https://ashutosh-portfolio-8x6q.onrender.com/admin/resume',
+          bullets: [
+            'Engineered an **AI-powered ATS optimization engine** that analyzes job descriptions, extracts technical keywords, and dynamically tailors resume bullets and skill rankings to maximize recruiter match rates.',
+            'Developed a **Chrome Extension (Manifest V3)** enabling 1-click **DOM form auto-fill** across Greenhouse, Lever, Workday, and LinkedIn, with real-time job scraping and instant tailored PDF generation.',
+            'Built an **automated dispatch pipeline** using scheduled **Cron background jobs**, queued email workflows with anti-spam rate limiting, and multi-tenant JWT-authenticated backend APIs.',
+            'Implemented a high-performance **LaTeX-based PDF compilation service** to generate ATS-compliant, single-page downloadable resumes on demand in under 800ms.'
+          ]
+        },
         {
           title: 'Real Estate SAAS Platform',
           tech: 'React JS, Node JS, Express, MongoDB',
