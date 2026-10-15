@@ -2,7 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
-import { getMasterResume, saveMasterResume, getEmailTemplate, getJobTargetById } from '../services/storageService.js';
+import { getMasterResume, saveMasterResume, getEmailTemplate, getJobTargetById, getDiscoveredJobs } from '../services/storageService.js';
 import { generateTailoredResume } from '../services/resumeTailorService.js';
 import { generateResumePDF } from '../services/pdfService.js';
 import { requireAuth, optionalAuth } from '../middleware/authMiddleware.js';
@@ -233,6 +233,38 @@ router.get('/tailored-pdf/:targetId', optionalAuth, async (req, res) => {
       targetRole: role,
       companyName: company || '',
       jobDescription: target.jobDescription || ''
+    });
+
+    const cleanName = (master?.fullName || 'Ashutosh_Kumar').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanRole = (role || 'Resume').replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${cleanName}_${cleanRole}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET Stream tailored ATS PDF resume for a discovered job
+router.get('/tailored-pdf/discovered/:id', optionalAuth, async (req, res) => {
+  try {
+    const result = await getDiscoveredJobs({ fetchAll: true }, req.userId || null);
+    const jobs = result.data || result;
+    const job = jobs.find(j => String(j._id) === String(req.params.id) || String(j.jobId) === String(req.params.id));
+    if (!job) {
+      return res.status(404).json({ success: false, error: 'Discovered job not found' });
+    }
+
+    const master = await getMasterResume(req.userId || null);
+    const role = job.title || master?.title || 'Software Developer';
+    const company = job.company || '';
+    const jd = job.jobDescription || `${role} at ${company}. Location: ${job.location || ''}`;
+
+    const pdfBuffer = await generateResumePDF(master, {
+      targetRole: role,
+      companyName: company,
+      jobDescription: jd
     });
 
     const cleanName = (master?.fullName || 'Ashutosh_Kumar').replace(/[^a-zA-Z0-9_-]/g, '_');

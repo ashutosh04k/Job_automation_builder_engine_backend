@@ -7,6 +7,7 @@ import Settings from '../models/Settings.js';
 import LogEntry from '../models/LogEntry.js';
 import User from '../models/User.js';
 import EmailTemplate from '../models/EmailTemplate.js';
+import DiscoveredJob from '../models/DiscoveredJob.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data_store');
 if (!fs.existsSync(DATA_DIR)) {
@@ -642,4 +643,241 @@ export async function saveEmailTemplate(data, userId = null) {
     }
   }
   return { subject, body };
+}
+
+// --- LINKEDIN DISCOVERED JOBS PIPELINE STORAGE ---
+
+export async function getDiscoveredJobs(options = {}, userId = null) {
+  const page = parseInt(options.page || 1, 10);
+  const limit = parseInt(options.limit || 10, 10);
+  const search = (options.search || '').trim().toLowerCase();
+  const applyType = (options.applyType || 'all').trim().toLowerCase();
+  const status = (options.status || 'all').trim().toLowerCase();
+  const fetchAll = options.fetchAll === true;
+
+  if (isMongoConnected()) {
+    try {
+      const baseQuery = {};
+      if (userId) baseQuery.userId = userId;
+
+      const [allCount, easyCount, externalCount] = await Promise.all([
+        DiscoveredJob.countDocuments(baseQuery),
+        DiscoveredJob.countDocuments({ ...baseQuery, applyType: 'easy_apply' }),
+        DiscoveredJob.countDocuments({ ...baseQuery, applyType: 'external' })
+      ]);
+
+      const filterQuery = { ...baseQuery };
+      if (applyType && applyType !== 'all') {
+        filterQuery.applyType = applyType;
+      }
+      if (status && status !== 'all') {
+        filterQuery.status = status;
+      }
+      if (search) {
+        filterQuery.$or = [
+          { title: { $regex: search, $options: 'i' } },
+          { company: { $regex: search, $options: 'i' } },
+          { location: { $regex: search, $options: 'i' } },
+          { jobDescription: { $regex: search, $options: 'i' } }
+        ];
+      }
+
+      if (fetchAll) {
+        const allDocs = await DiscoveredJob.find(filterQuery).sort({ createdAt: -1 });
+        return {
+          data: allDocs.map(d => (d.toObject ? d.toObject() : d)),
+          counts: { all: allCount, easyApply: easyCount, external: externalCount }
+        };
+      }
+
+      const total = await DiscoveredJob.countDocuments(filterQuery);
+      const totalPages = Math.ceil(total / limit) || 1;
+      const currentPage = Math.min(Math.max(1, page), totalPages);
+      const skip = (currentPage - 1) * limit;
+
+      const docs = await DiscoveredJob.find(filterQuery)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+
+      return {
+        data: docs.map(d => (d.toObject ? d.toObject() : d)),
+        total,
+        page: currentPage,
+        limit,
+        totalPages,
+        hasPrevPage: currentPage > 1,
+        hasNextPage: currentPage < totalPages,
+        counts: { all: allCount, easyApply: easyCount, external: externalCount }
+      };
+    } catch (err) {
+      console.warn('Mongo DiscoveredJob fetch warning, falling back to disk:', err.message);
+    }
+  }
+
+  // Disk fallback
+  let all = readJsonFile('discovered_jobs', []);
+  if (userId) {
+    all = all.filter(j => j.userId && j.userId.toString() === userId.toString());
+  }
+
+  const allCount = all.length;
+  const easyCount = all.filter(j => j.applyType === 'easy_apply').length;
+  const externalCount = all.filter(j => j.applyType === 'external').length;
+
+  let filtered = [...all];
+  if (applyType && applyType !== 'all') {
+    filtered = filtered.filter(j => j.applyType === applyType);
+  }
+  if (status && status !== 'all') {
+    filtered = filtered.filter(j => j.status === status);
+  }
+  if (search) {
+    filtered = filtered.filter(j =>
+      (j.title || '').toLowerCase().includes(search) ||
+      (j.company || '').toLowerCase().includes(search) ||
+      (j.location || '').toLowerCase().includes(search) ||
+      (j.jobDescription || '').toLowerCase().includes(search)
+    );
+  }
+
+  filtered.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+  if (fetchAll) {
+    return { data: filtered, counts: { all: allCount, easyApply: easyCount, external: externalCount } };
+  }
+
+  const total = filtered.length;
+  const totalPages = Math.ceil(total / limit) || 1;
+  const currentPage = Math.min(Math.max(1, page), totalPages);
+  const startIndex = (currentPage - 1) * limit;
+  const paginatedData = filtered.slice(startIndex, startIndex + limit);
+
+  return {
+    data: paginatedData,
+    total,
+    page: currentPage,
+    limit,
+    totalPages,
+    hasPrevPage: currentPage > 1,
+    hasNextPage: currentPage < totalPages,
+    counts: { all: allCount, easyApply: easyCount, external: externalCount }
+  };
+}
+
+export async function saveDiscoveredJobsBatch(jobs = [], userId = null) {
+  if (!Array.isArray(jobs) || jobs.length === 0) {
+    return { insertedCount: 0, updatedCount: 0, totalCount: 0, easyApplyCount: 0, externalCount: 0 };
+  }
+
+  const processed = jobs.map(raw => {
+    const isEasy = Boolean(raw.isEasyApply || raw.applyType === 'easy_apply');
+    const roleTitle = (raw.title || raw.jobTitle || 'Software Developer').trim();
+    const company = (raw.company || raw.companyName || 'Unknown Company').trim();
+    const jd = raw.jobDescription || '';
+    const atsScore = calculateAtsScore(jd, roleTitle);
+
+    return {
+      userId: userId ? (typeof userId === 'string' ? new mongoose.Types.ObjectId(userId) : userId) : undefined,
+      jobId: String(raw.jobId || raw.id || Date.now().toString(36) + Math.random().toString(36).substr(2, 5)).trim(),
+      title: roleTitle,
+      company: company,
+      location: (raw.location || '').trim(),
+      jobUrl: raw.jobUrl || raw.url || `https://www.linkedin.com/jobs/view/${raw.jobId}/`,
+      applyType: isEasy ? 'easy_apply' : 'external',
+      isEasyApply: isEasy,
+      postedTime: raw.postedTime || '',
+      jobDescription: jd,
+      atsScore,
+      status: raw.status || 'new',
+      updatedAt: new Date()
+    };
+  });
+
+  let insertedCount = 0;
+  let updatedCount = 0;
+
+  if (isMongoConnected()) {
+    try {
+      for (const item of processed) {
+        const filter = { jobId: item.jobId };
+        if (userId) filter.userId = userId;
+
+        const res = await DiscoveredJob.updateOne(
+          filter,
+          { $set: item, $setOnInsert: { createdAt: new Date() } },
+          { upsert: true }
+        );
+
+        if (res.upsertedCount > 0) insertedCount++;
+        else updatedCount++;
+      }
+    } catch (err) {
+      console.warn('Mongo batch upsert warning:', err.message);
+    }
+  }
+
+  // Also maintain disk store
+  const local = readJsonFile('discovered_jobs', []);
+  for (const item of processed) {
+    const idx = local.findIndex(j => j.jobId === item.jobId && (!userId || String(j.userId) === String(userId)));
+    if (idx >= 0) {
+      local[idx] = { ...local[idx], ...item };
+    } else {
+      local.unshift({
+        _id: 'dj_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+        createdAt: new Date().toISOString(),
+        ...item
+      });
+    }
+  }
+  writeJsonFile('discovered_jobs', local.slice(0, 1000));
+
+  const easyApplyCount = processed.filter(j => j.applyType === 'easy_apply').length;
+  const externalCount = processed.length - easyApplyCount;
+
+  return {
+    insertedCount,
+    updatedCount,
+    totalCount: processed.length,
+    easyApplyCount,
+    externalCount
+  };
+}
+
+export async function updateDiscoveredJob(id, updates = {}, userId = null) {
+  if (isMongoConnected()) {
+    try {
+      const query = { _id: id };
+      if (userId) query.userId = userId;
+      const doc = await DiscoveredJob.findOneAndUpdate(query, { ...updates, updatedAt: new Date() }, { new: true });
+      if (doc) return doc.toObject();
+    } catch (err) {
+      console.warn('Mongo DiscoveredJob update warning:', err.message);
+    }
+  }
+  const local = readJsonFile('discovered_jobs', []);
+  const idx = local.findIndex(j => (j._id === id || j.id === id) && (!userId || String(j.userId) === String(userId)));
+  if (idx >= 0) {
+    local[idx] = { ...local[idx], ...updates, updatedAt: new Date().toISOString() };
+    writeJsonFile('discovered_jobs', local);
+    return local[idx];
+  }
+  return null;
+}
+
+export async function deleteDiscoveredJob(id, userId = null) {
+  if (isMongoConnected()) {
+    try {
+      const query = { _id: id };
+      if (userId) query.userId = userId;
+      await DiscoveredJob.deleteOne(query);
+    } catch (err) {
+      console.warn('Mongo DiscoveredJob delete warning:', err.message);
+    }
+  }
+  const local = readJsonFile('discovered_jobs', []);
+  const filtered = local.filter(j => !((j._id === id || j.id === id) && (!userId || String(j.userId) === String(userId))));
+  writeJsonFile('discovered_jobs', filtered);
+  return true;
 }

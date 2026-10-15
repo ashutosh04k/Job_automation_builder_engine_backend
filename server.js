@@ -11,6 +11,7 @@ import authRoutes from './routes/authRoutes.js';
 import templateRoutes from './routes/templateRoutes.js';
 import trackRoutes from './routes/trackRoutes.js';
 import autofillRoutes from './routes/autofillRoutes.js';
+import discoveredJobRoutes from './routes/discoveredJobRoutes.js';
 import { initCronService } from './services/cronService.js';
 import { getJobTargets, migrateOrphanRecordsToUser } from './services/storageService.js';
 import User from './models/User.js';
@@ -44,6 +45,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/template', templateRoutes);
 app.use('/api/track', trackRoutes);
 app.use('/api/autofill', autofillRoutes);
+app.use('/api/discovered-jobs', discoveredJobRoutes);
 
 // Serve Frontend Static Build in Production on Render (only if dist exists)
 const __dirname = path.resolve();
