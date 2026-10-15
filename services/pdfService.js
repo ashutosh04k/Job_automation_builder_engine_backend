@@ -727,17 +727,17 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
             'Deployed on **AWS EC2** with **Nginx** reverse proxy, SSL, and caching, serving 10k+ users with stable production performance.'
           ]
         },
-        {
-          title: 'E-commerce Platform',
-          tech: 'React, Node/Express, MongoDB',
-          linkText: '(GitHub)',
-          linkUrl: 'https://github.com/ashutosh04k/console-frontend-app',
-          bullets: [
-            'Constructed an **e-commerce platform** with React, Node/Express, and MongoDB covering products, cart, checkout, and orders.',
-            'Developed **backend APIs** for product management and admin workflows across two applications with product allocation.',
-            'Integrated **payment, delivery tracking, and inventory management** with synchronized stock updates across customer and admin portals.'
-          ]
-        }
+        // {
+        //   title: 'E-commerce Platform',
+        //   tech: 'React, Node/Express, MongoDB',
+        //   linkText: '(GitHub)',
+        //   linkUrl: 'https://github.com/ashutosh04k/console-frontend-app',
+        //   bullets: [
+        //     'Constructed an **e-commerce platform** with React, Node/Express, and MongoDB covering products, cart, checkout, and orders.',
+        //     'Developed **backend APIs** for product management and admin workflows across two applications with product allocation.',
+        //     'Integrated **payment, delivery tracking, and inventory management** with synchronized stock updates across customer and admin portals.'
+        //   ]
+        // }
       ];
 
       if (keywords && keywords.length > 0) {
