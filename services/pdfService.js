@@ -704,10 +704,10 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
 
       const projectsData = [
         {
-          title: 'AutoResume AI — Automated Job Pipeline & ATS Resume Engine',
-          tech: 'React.js, Node.js, Express, MongoDB, Chrome Extension (Manifest V3), AI/LLM, Cron Automation',
+          title: 'AutoResume AI Platform',
+          tech: 'React.js, Node.js, Express, MongoDB, Chrome Extension (MV3), AI',
           linkText: '(Live App)',
-          linkUrl: 'https://ashutosh-portfolio-8x6q.onrender.com/admin/resume',
+          linkUrl: 'https://resume-automation-app-adyg.onrender.com/',
           bullets: [
             'Engineered an **AI-powered ATS optimization engine** that analyzes job descriptions, extracts technical keywords, and dynamically tailors resume bullets and skill rankings to maximize recruiter match rates.',
             'Developed a **Chrome Extension (Manifest V3)** enabling 1-click **DOM form auto-fill** across Greenhouse, Lever, Workday, and LinkedIn, with real-time job scraping and instant tailored PDF generation.',
