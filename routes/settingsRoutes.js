@@ -90,11 +90,32 @@ router.post('/test-email', async (req, res) => {
   }
 });
 
-// GET Audit Logs (tenant-scoped)
+// GET Audit Logs (tenant-scoped) with pagination & search
 router.get('/logs', async (req, res) => {
   try {
-    const logs = await getLogs(req.userId || null);
-    res.json({ success: true, count: logs.length, data: logs });
+    const page = parseInt(req.query.page || '1', 10);
+    const limit = parseInt(req.query.limit || '10', 10);
+    const search = req.query.search || '';
+    const status = req.query.status || '';
+    const fetchAll = req.query.all === 'true';
+
+    const userId = req.userId || null;
+    const result = await getLogs({ page, limit, search, status, fetchAll }, userId);
+
+    if (fetchAll) {
+      return res.json({ success: true, count: result.length, data: result });
+    }
+
+    res.json({
+      success: true,
+      data: result.data,
+      total: result.total,
+      page: result.page,
+      limit: result.limit,
+      totalPages: result.totalPages,
+      hasPrevPage: result.hasPrevPage,
+      hasNextPage: result.hasNextPage
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

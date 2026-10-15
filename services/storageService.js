@@ -434,20 +434,102 @@ export async function createLogEntry(logData, userId = null) {
   return newLogObj;
 }
 
-export async function getLogs(userId = null) {
+export async function getLogs(options = {}, userId = null) {
+  let opts = options;
+  let actualUserId = userId;
+  if (typeof options === 'string' || (options && options._bsontype)) {
+    actualUserId = options;
+    opts = {};
+  }
+  const page = parseInt(opts.page || 1, 10);
+  const limit = parseInt(opts.limit || 10, 10);
+  const search = (opts.search || '').trim().toLowerCase();
+  const status = (opts.status || '').trim().toLowerCase();
+  const fetchAll = opts.fetchAll === true;
+
   if (isMongoConnected()) {
     try {
-      const query = userId ? { userId } : {};
-      return await LogEntry.find(query).sort({ createdAt: -1 }).limit(100);
+      const query = {};
+      if (actualUserId) query.userId = actualUserId;
+      if (status && status !== 'all') query.status = status;
+      if (search) {
+        query.$or = [
+          { recipientEmail: { $regex: search, $options: 'i' } },
+          { details: { $regex: search, $options: 'i' } },
+          { jobDescriptionSnippet: { $regex: search, $options: 'i' } },
+          { triggeredBy: { $regex: search, $options: 'i' } }
+        ];
+      }
+
+      if (fetchAll) {
+        const allDocs = await LogEntry.find(query).sort({ createdAt: -1 });
+        return allDocs.map(d => (d.toObject ? d.toObject() : d));
+      }
+
+      const total = await LogEntry.countDocuments(query);
+      const totalPages = Math.ceil(total / limit) || 1;
+      const currentPage = Math.min(Math.max(1, page), totalPages);
+      const skip = (currentPage - 1) * limit;
+
+      const docs = await LogEntry.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+
+      return {
+        data: docs.map(d => (d.toObject ? d.toObject() : d)),
+        total,
+        page: currentPage,
+        limit,
+        totalPages,
+        hasPrevPage: currentPage > 1,
+        hasNextPage: currentPage < totalPages
+      };
     } catch (err) {
-      console.warn('Mongo LogEntry fetch warning:', err.message);
+      console.warn('Mongo LogEntry fetch warning, falling back to disk:', err.message);
     }
   }
-  const logs = readJsonFile('logs', []);
-  if (userId) {
-    return logs.filter(l => l.userId && l.userId.toString() === userId.toString());
+
+  // Disk storage fallback
+  let logs = readJsonFile('logs', []);
+  if (actualUserId) {
+    logs = logs.filter(l => l.userId && l.userId.toString() === actualUserId.toString());
   }
-  return logs;
+
+  if (status && status !== 'all') {
+    logs = logs.filter(l => (l.status || '').toLowerCase() === status);
+  }
+
+  if (search) {
+    logs = logs.filter(l =>
+      (l.recipientEmail || '').toLowerCase().includes(search) ||
+      (l.details || '').toLowerCase().includes(search) ||
+      (l.jobDescriptionSnippet || '').toLowerCase().includes(search) ||
+      (l.triggeredBy || '').toLowerCase().includes(search)
+    );
+  }
+
+  logs.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+  if (fetchAll) {
+    return logs;
+  }
+
+  const total = logs.length;
+  const totalPages = Math.ceil(total / limit) || 1;
+  const currentPage = Math.min(Math.max(1, page), totalPages);
+  const startIndex = (currentPage - 1) * limit;
+  const paginatedData = logs.slice(startIndex, startIndex + limit);
+
+  return {
+    data: paginatedData,
+    total,
+    page: currentPage,
+    limit,
+    totalPages,
+    hasPrevPage: currentPage > 1,
+    hasNextPage: currentPage < totalPages
+  };
 }
 
 // --- DYNAMIC PER-USER EMAIL TEMPLATE STORAGE ---
