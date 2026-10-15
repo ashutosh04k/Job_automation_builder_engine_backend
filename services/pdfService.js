@@ -658,12 +658,18 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
 
       function renderProject(title, tech, linkText, linkUrl, bullets) {
         const pY = doc.y;
-        doc.font('Times-Bold').fontSize(9.8).fillColor('#000000')
-           .text(title, contentX, pY, { continued: true, lineBreak: false });
-        doc.font('Times-Roman').fontSize(9.8).text(' --- ' + tech, { lineBreak: false });
+        const linkW = doc.font('Times-Roman').fontSize(9.8).widthOfString(linkText);
+        const maxTextW = contentWidth - linkW - 10;
+
         doc.font('Times-Roman').fontSize(9.8).fillColor('#0000ff')
            .text(linkText, contentX, pY, { width: contentWidth, align: 'right', link: linkUrl, lineBreak: false });
-        doc.y = pY + doc.currentLineHeight() + SP.entryTop;
+
+        doc.font('Times-Bold').fontSize(9.8).fillColor('#000000')
+           .text(title, contentX, pY, { continued: true, width: maxTextW });
+        doc.font('Times-Roman').fontSize(9.8).fillColor('#000000')
+           .text(' --- ' + tech, { width: maxTextW });
+
+        doc.y = Math.max(doc.y, pY + doc.currentLineHeight()) + SP.entryTop;
 
         sortByKeywords(bullets).forEach(renderBullet);
         doc.y += SP.entryGap;
@@ -671,8 +677,8 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
 
       const projectsData = [
         {
-          title: 'AutoResume AI — Automated Job Pipeline & ATS Resume Engine',
-          tech: 'React.js, Node.js, Express, MongoDB, Chrome Extension (Manifest V3), AI/LLM, Cron Automation',
+          title: 'AutoResume AI Platform',
+          tech: 'React.js, Node.js, Express, MongoDB, Chrome Extension (MV3), AI',
           linkText: '(Live App)',
           linkUrl: 'https://resume-automation-app-adyg.onrender.com/',
           bullets: [
