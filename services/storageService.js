@@ -87,6 +87,30 @@ export async function migrateOrphanRecordsToUser(userId) {
   }
 }
 
+// Candidate Skills Dictionary for ATS Scoring
+const CANDIDATE_ATS_SKILLS = [
+  'react', 'react.js', 'next.js', 'nextjs', 'typescript', 'javascript', 'node', 'node.js',
+  'express', 'mongodb', 'sql', 'postgres', 'postgresql', 'mysql', 'aws', 'docker', 'kubernetes',
+  'redux', 'rtk query', 'tailwind', 'material ui', 'websockets', 'firebase', 'stripe', 'payment',
+  'ci/cd', 'github actions', 'nginx', 'graphql', 'rest api', 'microservices', 'seo', 'crm',
+  'llm', 'ai', 'langchain', 'jest', 'cypress', 'performance', 'virtualization', 'memoization',
+  'rbac', 'push notification', 'google maps', 'tracking', 'order', 'ecommerce', 'e-commerce',
+  'saas', 'python', 'java', 'frontend', 'backend', 'full stack', 'cloud', 'architecture'
+];
+
+export function calculateAtsScore(jobDescription = '', targetRole = '') {
+  const text = `${jobDescription || ''} ${targetRole || ''}`.toLowerCase();
+  if (!text.trim()) return 86;
+
+  let matches = 0;
+  for (const skill of CANDIDATE_ATS_SKILLS) {
+    if (text.includes(skill)) matches++;
+  }
+
+  // Base score 82 for LaTeX single-page template with metrics, +2 for each keyword up to 98%
+  return Math.min(98, 82 + Math.min(16, matches * 2));
+}
+
 // --- JOB TARGETS STORAGE WITH USER-SCOPING & PAGINATION ---
 export async function getJobTargets(options = {}, userId = null) {
   const page = parseInt(options.page || 1, 10);
@@ -133,6 +157,13 @@ export async function getJobTargets(options = {}, userId = null) {
     );
   }
 
+  // Populate ATS Match Score for each target
+  allTargets.forEach(t => {
+    if (!t.atsScore) {
+      t.atsScore = calculateAtsScore(t.jobDescription, t.targetRole);
+    }
+  });
+
   if (fetchAll) {
     return allTargets;
   }
@@ -159,6 +190,8 @@ export async function createJobTarget(data, userId = null) {
   let createdDoc = null;
   const targetId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
+  const atsScore = calculateAtsScore(data.jobDescription, data.targetRole);
+
   const newTargetObj = {
     _id: targetId,
     userId: userId ? userId.toString() : null,
@@ -169,6 +202,7 @@ export async function createJobTarget(data, userId = null) {
     cronSchedule: '0 9 * * *',
     isActive: true,
     status: 'active',
+    atsScore,
     totalSentCount: 0,
     lastSentAt: null,
     createdAt: new Date().toISOString(),
@@ -179,6 +213,7 @@ export async function createJobTarget(data, userId = null) {
     try {
       const doc = new JobTarget({
         ...data,
+        atsScore,
         userId: userId || undefined
       });
       await doc.save();

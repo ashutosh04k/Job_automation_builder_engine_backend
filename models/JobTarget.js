@@ -41,6 +41,10 @@ const jobTargetSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    atsScore: {
+      type: Number,
+      default: 85,
+    },
     status: {
       type: String,
       enum: ['active', 'paused', 'error', 'completed'],
