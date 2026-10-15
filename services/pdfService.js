@@ -382,15 +382,52 @@ function scoreTextAgainstKeywords(text = '', keywords = []) {
   return score;
 }
 
+// ---------------------------------------------------------------------------
+// FONT SIZES (pt) — matches resume.cls 11pt base. Scaled down automatically
+// if the content would overflow one page.
+// ---------------------------------------------------------------------------
+const FS_BASE = {
+  name: 20,
+  subtitle: 11,
+  contact: 10.5,
+  section: 11.5,
+  entryHeader: 11,   // "Role at Company"
+  body: 10.5,        // bullets, skills rows
+  small: 10.5        // education, project titles
+};
+
+// ---------------------------------------------------------------------------
+// SPACING (pt) — mirrors resume.cls / itemize
+// ---------------------------------------------------------------------------
+const SP_BASE = {
+  nameSkip: 8,          // \nameskip (\bigskip) – under the name
+  addressSkip: 2.5,     // \addressskip (\smallskip) – between header lines
+  sectionSkip: 5,       // \sectionskip (\medskip) – before section title
+  sectionLineSkip: 2,   // \sectionlineskip – title ➜ hrule
+  afterRule: 5,         // rSection list \topsep – hrule ➜ first content
+  sectionIndent: 14,    // rSection \leftmargin 1.5em
+  entryTop: 3,          // itemize \topsep – entry header ➜ first bullet
+  itemSep: 0.5,         // \parsep + \itemsep(-4pt) – between bullets
+  entryGap: 4,          // end of itemize ➜ next entry header
+  bulletIndent: 22,     // itemize \leftmarginii 2.2em (relative to section indent)
+  labelSep: 5,          // \labelsep .5em – bullet ➜ text
+  skillLabelWidth: 100, // tabular first column + 6ex gap
+  rowSep: 1.2,          // tabular row gap in SKILLS
+  lineGap: 0            // wrapped-line gap inside a bullet
+};
+
+const scaleObj = (obj, scale) =>
+  Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, v * scale]));
+
 /**
  * Generate a Tailored ATS PDF Resume Buffer
  * Layout mirrors Ashutosh Kumar's LaTeX resume (resume.cls):
  *   geometry: left/top/right 0.2in, bottom 0.1in
- *   \nameskip, \addressskip, \sectionskip, \sectionlineskip, rSection \leftmargin 1.5em
- *   itemize with \itemsep -4pt, \leftmarginii 2.2em, \labelsep .5em
+ * Fonts start at 11pt base and are scaled down in steps until the resume
+ * fits on a single page.
  */
 export function generateResumePDF(masterResume = {}, tailoredData = {}) {
-  return new Promise((resolve, reject) => {
+  const build = (scale) => new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({
         size: 'letter',
@@ -400,31 +437,24 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
 
       const buffers = [];
       doc.on('data', buffers.push.bind(buffers));
-      doc.on('end', () => resolve(Buffer.concat(buffers)));
+
+      const FS = scaleObj(FS_BASE, scale);
+      // Only scale the vertical gaps; keep horizontal indents fixed
+      const SP = {
+        ...SP_BASE,
+        nameSkip: SP_BASE.nameSkip * scale,
+        addressSkip: SP_BASE.addressSkip * scale,
+        sectionSkip: SP_BASE.sectionSkip * scale,
+        sectionLineSkip: SP_BASE.sectionLineSkip * scale,
+        afterRule: SP_BASE.afterRule * scale,
+        entryTop: SP_BASE.entryTop * scale,
+        entryGap: SP_BASE.entryGap * scale,
+        rowSep: SP_BASE.rowSep * scale
+      };
 
       const left = 14.4;
       const width = doc.page.width - 28.8;
       const right = left + width;
-
-      // -----------------------------------------------------------------------
-      // SPACING CONFIG (pt) — one place to tune, mirrors resume.cls / itemize
-      // -----------------------------------------------------------------------
-      const SP = {
-        nameSkip: 8,         // \nameskip (\bigskip) – under the name
-        addressSkip: 2.5,    // \addressskip (\smallskip) – between header lines
-        sectionSkip: 5,      // \sectionskip (\medskip) – before section title
-        sectionLineSkip: 2,  // \sectionlineskip – title ➜ hrule
-        afterRule: 5,        // rSection list \topsep – hrule ➜ first content
-        sectionIndent: 14,   // rSection \leftmargin 1.5em
-        entryTop: 3,         // itemize \topsep – entry header ➜ first bullet
-        itemSep: 0.5,        // \parsep + \itemsep(-4pt) – between bullets
-        entryGap: 4,         // end of itemize ➜ next entry header
-        bulletIndent: 20,    // itemize \leftmarginii 2.2em (relative to section indent)
-        labelSep: 5,         // \labelsep .5em – bullet ➜ text
-        skillLabelWidth: 95, // tabular first column + 6ex gap
-        rowSep: 1.2,         // tabular row gap in SKILLS
-        lineGap: 0           // wrapped-line gap inside a bullet
-      };
       const contentX = left + SP.sectionIndent;
       const contentWidth = right - contentX;
 
@@ -452,7 +482,7 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
       function renderSection(title) {
         doc.y += SP.sectionSkip;
         const y0 = doc.y;
-        doc.font('Times-Bold').fontSize(10.5).fillColor('#000000')
+        doc.font('Times-Bold').fontSize(FS.section).fillColor('#000000')
            .text(title.toUpperCase(), left, y0, { lineBreak: false });
         const ruleY = y0 + doc.currentLineHeight() + SP.sectionLineSkip;
         doc.lineWidth(0.45).strokeColor('#000000').moveTo(left, ruleY).lineTo(right, ruleY).stroke();
@@ -462,11 +492,11 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
       // Entry header: "Role at Company" bold-left, dates right (\hfill)
       function renderExpHeader(role, company, dates) {
         const y = doc.y;
-        doc.font('Times-Bold').fontSize(10).fillColor('#000000')
+        doc.font('Times-Bold').fontSize(FS.entryHeader).fillColor('#000000')
            .text(role, contentX, y, { continued: true, lineBreak: false });
-        doc.font('Times-Roman').fontSize(10).text(' at ', { continued: true });
-        doc.font('Times-Bold').fontSize(10).text(company, { lineBreak: false });
-        doc.font('Times-Roman').fontSize(10).fillColor('#000000')
+        doc.font('Times-Roman').fontSize(FS.entryHeader).text(' at ', { continued: true });
+        doc.font('Times-Bold').fontSize(FS.entryHeader).text(company, { lineBreak: false });
+        doc.font('Times-Roman').fontSize(FS.entryHeader).fillColor('#000000')
            .text(dates, contentX, y, { width: contentWidth, align: 'right', lineBreak: false });
         doc.y = y + doc.currentLineHeight() + SP.entryTop;
       }
@@ -477,13 +507,13 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
         const textWidth = right - textX;
         const startY = doc.y;
 
-        doc.font('Times-Roman').fontSize(9.5).fillColor('#000000');
+        doc.font('Times-Roman').fontSize(FS.body).fillColor('#000000');
         const bulletX = textX - SP.labelSep - doc.widthOfString('•');
         doc.text('•', bulletX, startY, { lineBreak: false });
 
         doc.x = textX;
         doc.y = startY;
-        renderRichText(text, 9.5, textWidth);
+        renderRichText(text, FS.body, textWidth);
 
         doc.y = Math.max(doc.y, startY + doc.currentLineHeight()) + SP.itemSep;
       }
@@ -498,7 +528,7 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
       // -----------------------------------------------------------------------
 
       // Name (blue, bold, centered, uppercase — \name)
-      doc.font('Times-Bold').fontSize(17.5).fillColor('#0000ff')
+      doc.font('Times-Bold').fontSize(FS.name).fillColor('#0000ff')
          .text('ASHUTOSH KUMAR', left, 14.4, {
            align: 'center',
            width,
@@ -513,7 +543,7 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
       } else if (rLower.includes('backend') || rLower.includes('node') || rLower.includes('api')) {
         subtitle = 'Software Developer | Backend Developer | Node.js | TypeScript | Express | MongoDB | AWS';
       }
-      doc.font('Times-Roman').fontSize(10).fillColor('#000000')
+      doc.font('Times-Roman').fontSize(FS.subtitle).fillColor('#000000')
          .text(subtitle, left, doc.y, { align: 'center', width });
       doc.y += SP.addressSkip;
 
@@ -531,14 +561,14 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
         { text: 'Github', color: '#0000ff', link: 'https://github.com/ashutosh04k' }
       ];
 
-      doc.font('Times-Roman').fontSize(9.8);
+      doc.font('Times-Roman').fontSize(FS.contact);
       const totalContactWidth = contactSegments.reduce((sum, s) => sum + doc.widthOfString(s.text), 0);
 
       let currentContactX = (doc.page.width - totalContactWidth) / 2;
       const contactY = doc.y;
 
       contactSegments.forEach(s => {
-        doc.font('Times-Roman').fontSize(9.8).fillColor(s.color);
+        doc.font('Times-Roman').fontSize(FS.contact).fillColor(s.color);
         doc.text(s.text, currentContactX, contactY, {
           link: s.link || undefined,
           continued: false,
@@ -629,12 +659,12 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
         }).join(' , ');
 
         const startRowY = doc.y;
-        doc.font('Times-Bold').fontSize(9.5).fillColor('#000000')
+        doc.font('Times-Bold').fontSize(FS.body).fillColor('#000000')
            .text(label, contentX, startRowY, { width: SP.skillLabelWidth, lineBreak: false });
 
         doc.x = skillValueX;
         doc.y = startRowY;
-        renderRichText(formattedText, 9.5, skillValueWidth);
+        renderRichText(formattedText, FS.body, skillValueWidth);
 
         doc.y = Math.max(doc.y, startRowY + doc.currentLineHeight()) + SP.rowSep;
       });
@@ -644,10 +674,10 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
       // =========================================================================
       renderSection('EDUCATION');
       const eduY = doc.y;
-      doc.font('Times-Bold').fontSize(9.8).fillColor('#000000')
+      doc.font('Times-Bold').fontSize(FS.small).fillColor('#000000')
          .text('Bachelor of Computer Science', contentX, eduY, { continued: true, lineBreak: false });
-      doc.font('Times-Roman').fontSize(9.8).text(', J.I.E.T Jodhpur (SGPA : 8.5/10)', { lineBreak: false });
-      doc.font('Times-Roman').fontSize(9.8).fillColor('#000000')
+      doc.font('Times-Roman').fontSize(FS.small).text(', J.I.E.T Jodhpur (SGPA : 8.5/10)', { lineBreak: false });
+      doc.font('Times-Roman').fontSize(FS.small).fillColor('#000000')
          .text('2019 - 2023', contentX, eduY, { width: contentWidth, align: 'right', lineBreak: false });
       doc.y = eduY + doc.currentLineHeight();
 
@@ -658,36 +688,18 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
 
       function renderProject(title, tech, linkText, linkUrl, bullets) {
         const pY = doc.y;
-        const linkW = doc.font('Times-Roman').fontSize(9.8).widthOfString(linkText);
-        const maxTextW = contentWidth - linkW - 10;
-
-        doc.font('Times-Roman').fontSize(9.8).fillColor('#0000ff')
+        doc.font('Times-Bold').fontSize(FS.small).fillColor('#000000')
+           .text(title, contentX, pY, { continued: true, lineBreak: false });
+        doc.font('Times-Roman').fontSize(FS.small).text(' --- ' + tech, { lineBreak: false });
+        doc.font('Times-Roman').fontSize(FS.small).fillColor('#0000ff')
            .text(linkText, contentX, pY, { width: contentWidth, align: 'right', link: linkUrl, lineBreak: false });
-
-        doc.font('Times-Bold').fontSize(9.8).fillColor('#000000')
-           .text(title, contentX, pY, { continued: true, width: maxTextW });
-        doc.font('Times-Roman').fontSize(9.8).fillColor('#000000')
-           .text(' --- ' + tech, { width: maxTextW });
-
-        doc.y = Math.max(doc.y, pY + doc.currentLineHeight()) + SP.entryTop;
+        doc.y = pY + doc.currentLineHeight() + SP.entryTop;
 
         sortByKeywords(bullets).forEach(renderBullet);
         doc.y += SP.entryGap;
       }
 
       const projectsData = [
-        {
-          title: 'AutoResume AI Platform',
-          tech: 'React.js, Node.js, Express, MongoDB, Chrome Extension (MV3), AI',
-          linkText: '(Live App)',
-          linkUrl: 'https://resume-automation-app-adyg.onrender.com/',
-          bullets: [
-            'Engineered an **AI-powered ATS optimization engine** that analyzes job descriptions, extracts technical keywords, and dynamically tailors resume bullets and skill rankings to maximize recruiter match rates.',
-            'Developed a **Chrome Extension (Manifest V3)** enabling 1-click **DOM form auto-fill** across Greenhouse, Lever, Workday, and LinkedIn, with real-time job scraping and instant tailored PDF generation.',
-            'Built an **automated dispatch pipeline** using scheduled **Cron background jobs**, queued email workflows with anti-spam rate limiting, and multi-tenant JWT-authenticated backend APIs.',
-            'Implemented a high-performance **LaTeX-based PDF compilation service** to generate ATS-compliant, single-page downloadable resumes on demand in under 800ms.'
-          ]
-        },
         {
           title: 'Real Estate SAAS Platform',
           tech: 'React JS, Node JS, Express, MongoDB',
@@ -725,9 +737,22 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
         renderProject(p.title, p.tech, p.linkText, p.linkUrl, p.bullets);
       });
 
+      // Read page count BEFORE doc.end()
+      const pages = doc.bufferedPageRange().count;
+      doc.on('end', () => resolve({ buffer: Buffer.concat(buffers), pages }));
       doc.end();
     } catch (err) {
       reject(err);
     }
   });
+
+  // Try full size first; shrink in steps until it fits on one page.
+  return (async () => {
+    const scales = [1, 0.96, 0.92, 0.88];
+    for (const scale of scales) {
+      const { buffer, pages } = await build(scale);
+      if (pages === 1) return buffer;
+    }
+    return (await build(0.85)).buffer;
+  })();
 }
