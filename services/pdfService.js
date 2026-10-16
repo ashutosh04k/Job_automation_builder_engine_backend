@@ -59,7 +59,7 @@
 
 //       // --- 1. NAME (Blue, Bold, Centered, All Caps, 17.5pt matching LaTeX \name) ---
 //       doc.font('Times-Bold').fontSize(17.5).fillColor('#0000ff')
-//          .text('ASHUTOSH KUMAR', left, 14.4, { align: 'center', link: 'https://ashutosh-portfolio-8x6q.onrender.com/' });
+//          .text('ASHUTOSH KUMAR', left, 14.4, { align: 'center', link: 'https://drive.google.com/file/d/1bN0IYYY6qEd2XJk9SaWhLeiW3FjJqens/view?usp=sharing' });
 //       doc.moveDown(0.2);
 
 //       // --- 2. SUBTITLE (Tailored to role, Em-dash separated, 10pt) ---
@@ -77,7 +77,7 @@
 //         { text: 'Gurgaon, Haryana | ', color: '#000000' },
 //         { text: '+91 85219 75695', color: '#0000ff', link: 'tel:+918521975695' },
 //         { text: ' | ', color: '#000000' },
-//         { text: 'Portfolio', color: '#0000ff', link: 'https://ashutosh-portfolio-8x6q.onrender.com/' },
+//         { text: 'Portfolio', color: '#0000ff', link: 'https://drive.google.com/file/d/1bN0IYYY6qEd2XJk9SaWhLeiW3FjJqens/view?usp=sharing' },
 //         { text: ' | ', color: '#000000' },
 //         { text: 'Mail', color: '#0000ff', link: 'mailto:kumarasutosh2014@gmail.com' },
 //         { text: ' | ', color: '#000000' },
@@ -291,7 +291,7 @@
 //           title: 'AutoResume AI — Automated Job Pipeline & ATS Resume Engine',
 //           tech: 'React.js, Node.js, Express, MongoDB, Chrome Extension (Manifest V3), AI/LLM, Cron Automation',
 //           linkText: '(Live App)',
-//           linkUrl: 'https://ashutosh-portfolio-8x6q.onrender.com/admin/resume',
+//           linkUrl: 'https://resume-automation-app-adyg.onrender.com/admin/resume',
 //           bullets: [
 //             'Engineered an **AI-powered ATS optimization engine** that analyzes job descriptions, extracts technical keywords, and dynamically tailors resume bullets and skill rankings to maximize recruiter match rates.',
 //             'Developed a **Chrome Extension (Manifest V3)** enabling 1-click **DOM form auto-fill** across Greenhouse, Lever, Workday, and LinkedIn, with real-time job scraping and instant tailored PDF generation.',
@@ -527,12 +527,14 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
       // HEADER
       // -----------------------------------------------------------------------
 
+      const driveResumeUrl = masterResume?.resumeUrl || masterResume?.website || 'https://drive.google.com/file/d/1bN0IYYY6qEd2XJk9SaWhLeiW3FjJqens/view?usp=sharing';
+
       // Name (blue, bold, centered, uppercase — \name)
       doc.font('Times-Bold').fontSize(FS.name).fillColor('#0000ff')
          .text('ASHUTOSH KUMAR', left, 14.4, {
            align: 'center',
            width,
-           link: 'https://ashutosh-portfolio-8x6q.onrender.com/'
+           link: driveResumeUrl
          });
       doc.y = 14.4 + doc.currentLineHeight() + SP.nameSkip;
 
@@ -552,7 +554,7 @@ export function generateResumePDF(masterResume = {}, tailoredData = {}) {
         { text: 'Gurgaon, Haryana | ', color: '#000000' },
         { text: '+91 85219 75695', color: '#0000ff', link: 'tel:+918521975695' },
         { text: ' | ', color: '#000000' },
-        { text: 'Portfolio', color: '#0000ff', link: 'https://ashutosh-portfolio-8x6q.onrender.com/' },
+        { text: 'Portfolio / Resume', color: '#0000ff', link: driveResumeUrl },
         { text: ' | ', color: '#000000' },
         { text: 'Mail', color: '#0000ff', link: 'mailto:kumarasutosh2014@gmail.com' },
         { text: ' | ', color: '#000000' },

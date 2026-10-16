@@ -11,7 +11,8 @@ export function renderEmailTemplate(template, { masterResume, targetRole, compan
   const company = companyName || 'your company';
   const linkedin = masterResume?.linkedin || '';
   const github = masterResume?.github || '';
-  const portfolio = masterResume?.website || '';
+  const portfolio = masterResume?.website || 'https://drive.google.com/file/d/1bN0IYYY6qEd2XJk9SaWhLeiW3FjJqens/view?usp=sharing';
+  const resumeUrl = masterResume?.resumeUrl || portfolio;
 
   // Extract skills string
   let skillsStr = 'React.js, Next.js, TypeScript, Node.js, Express.js, MongoDB, REST APIs, Tailwind CSS, AWS, and Docker';
@@ -57,7 +58,8 @@ export function renderEmailTemplate(template, { masterResume, targetRole, compan
     .replace(/\{\{\s*skills\s*\}\}/gi, skillsStr)
     .replace(/\{\{\s*linkedin\s*\}\}/gi, linkedin)
     .replace(/\{\{\s*github\s*\}\}/gi, github)
-    .replace(/\{\{\s*portfolio\s*\}\}/gi, portfolio);
+    .replace(/\{\{\s*portfolio\s*\}\}/gi, portfolio)
+    .replace(/\{\{\s*resume\s*\}\}/gi, resumeUrl);
 
   // Convert paragraphs and auto-link URLs for HTML email body
   const htmlBody = textBody
@@ -139,6 +141,7 @@ I'm currently exploring {{role}} opportunities. I've attached my resume for your
 LinkedIn: {{linkedin}}
 GitHub: {{github}}
 Portfolio: {{portfolio}}
+Resume: {{resume}}
 
 Thank you for your time and consideration.
 

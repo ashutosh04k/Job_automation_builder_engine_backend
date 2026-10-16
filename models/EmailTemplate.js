@@ -22,6 +22,7 @@ I'm currently exploring {{role}} opportunities. I've attached my resume for your
 LinkedIn: {{linkedin}}
 GitHub: {{github}}
 Portfolio: {{portfolio}}
+Resume: {{resume}}
 
 Thank you for your time and consideration.
 

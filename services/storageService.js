@@ -314,7 +314,8 @@ export async function getMasterResume(userId = null) {
     location: 'Gurgaon, Haryana',
     title: 'Software Developer | Full Stack Developer',
     summary: 'Full Stack Software Developer with 3+ years of experience building scalable web applications, REST APIs, real-time systems, CRM platforms, and data-intensive workflows using React.js, Node.js, MongoDB, TypeScript, AWS, and Docker.',
-    website: 'https://ashutosh-portfolio-8x6q.onrender.com/',
+    website: 'https://drive.google.com/file/d/1bN0IYYY6qEd2XJk9SaWhLeiW3FjJqens/view?usp=sharing',
+    resumeUrl: 'https://drive.google.com/file/d/1bN0IYYY6qEd2XJk9SaWhLeiW3FjJqens/view?usp=sharing',
     linkedin: 'https://www.linkedin.com/in/ashutosh-kumar-sde',
     github: 'https://github.com/ashutosh04k',
     skills: [
@@ -584,6 +585,7 @@ I'm currently exploring {{role}} opportunities. I've attached my resume for your
 LinkedIn: {{linkedin}}
 GitHub: {{github}}
 Portfolio: {{portfolio}}
+Resume: {{resume}}
 
 Thank you for your time and consideration.
 

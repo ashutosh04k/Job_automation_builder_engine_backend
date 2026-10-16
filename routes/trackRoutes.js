@@ -84,7 +84,7 @@ router.get('/click/:targetId', async (req, res) => {
   const rawTargetId = req.params.targetId;
   const cleanTargetId = rawTargetId.replace(/\.(png|gif|jpg|jpeg)$/i, '');
 
-  const fallbackUrl = 'https://ashutosh-portfolio-8x6q.onrender.com/';
+  const fallbackUrl = 'https://drive.google.com/file/d/1bN0IYYY6qEd2XJk9SaWhLeiW3FjJqens/view?usp=sharing';
   const destination = url ? decodeURIComponent(url) : fallbackUrl;
 
   try {

@@ -74,7 +74,16 @@ export const DEFAULT_QA_RULES = [
     category: 'Links',
     question: 'Portfolio / Website URL',
     keywords: ['portfolio', 'portfolio url', 'website', 'personal website', 'personal url'],
-    answer: 'https://ashutosh-portfolio-8x6q.onrender.com/',
+    answer: 'https://drive.google.com/file/d/1bN0IYYY6qEd2XJk9SaWhLeiW3FjJqens/view?usp=sharing',
+    type: 'text',
+    isDefault: true
+  },
+  {
+    id: 'resume_link',
+    category: 'Links',
+    question: 'Resume Link / Google Drive URL',
+    keywords: ['resume link', 'resume url', 'cv link', 'cv url', 'link to resume', 'google drive resume'],
+    answer: 'https://drive.google.com/file/d/1bN0IYYY6qEd2XJk9SaWhLeiW3FjJqens/view?usp=sharing',
     type: 'text',
     isDefault: true
   },
