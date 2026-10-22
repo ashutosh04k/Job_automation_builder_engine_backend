@@ -4,6 +4,7 @@ import MailComposer from 'nodemailer/lib/mail-composer/index.js';
 import { OAuth2Client } from 'google-auth-library';
 import { getSettings, getMasterResume, isMongoConnected } from './storageService.js';
 import { generateResumePDF } from './pdfService.js';
+import { isPrimaryUser } from '../shared/owner.js';
 import User from '../models/User.js';
 
 export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailoredData, userId = null }) {
@@ -20,8 +21,11 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
       }
     }
 
-    const senderName = userObj?.senderName || settings?.senderName || masterResume?.fullName || process.env.SENDER_NAME || 'Ashutosh Kumar';
-    const senderEmail = userObj?.senderEmail || settings?.senderEmail || masterResume?.email || process.env.SENDER_EMAIL || 'kumarasutosh2014@gmail.com';
+    const senderName = userObj?.senderName || settings?.senderName || masterResume?.fullName || process.env.SENDER_NAME || '';
+    const senderEmail = userObj?.senderEmail || settings?.senderEmail || masterResume?.email || process.env.SENDER_EMAIL || '';
+    if (!senderEmail) {
+      throw new Error('No sender email configured. Set it in Settings before sending.');
+    }
 
     // Check if custom uploaded PDF resume exists for this specific user or global fallback
     let customPdfPath = null;
@@ -30,7 +34,7 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
       if (fs.existsSync(userPdf)) customPdfPath = userPdf;
     }
     // Only primary owner can fall back to the pre-existing global uploads/my_resume.pdf
-    if (!customPdfPath && (userObj?.email === 'kumarasutosh2014@gmail.com' || (!userId && !userObj))) {
+    if (!customPdfPath && (isPrimaryUser(userObj?.email) || (!userId && !userObj))) {
       const globalPdf = path.resolve(process.cwd(), 'uploads', 'my_resume.pdf');
       if (fs.existsSync(globalPdf)) customPdfPath = globalPdf;
     }
@@ -56,7 +60,7 @@ export async function sendTailoredResumeEmail({ to, subject, htmlContent, tailor
     const gmailRefreshToken = userObj?.gmailRefreshToken || settings?.gmailRefreshToken || process.env.GMAIL_REFRESH_TOKEN || '';
 
     // Attachment filename formatted nicely per user
-    const cleanFilename = `${(senderName || 'Ashutosh_Kumar').replace(/[^a-zA-Z0-9_-]/g, '_')}_Resume.pdf`;
+    const cleanFilename = `${(senderName || 'Resume').replace(/[^a-zA-Z0-9_-]/g, '_')}_Resume.pdf`;
 
     // --- PRIMARY: Official Gmail REST API via OAuth2 (Bypasses SMTP port blocks, Primary tab, Sent box) ---
     if (gmailClientId && gmailClientSecret && gmailRefreshToken) {

@@ -2,7 +2,7 @@
  * Smart Resume Tailor Service - Dynamic Email Pitch Generator
  * Renders user-customized templates with dynamic tags and recruiter alignment
  */
-
+import { extractSkills } from "../shared/keywords.js";
 export function renderEmailTemplate(template, { masterResume, targetRole, companyName }) {
   const name = masterResume?.fullName || 'Applicant';
   const email = masterResume?.email || '';
@@ -11,7 +11,7 @@ export function renderEmailTemplate(template, { masterResume, targetRole, compan
   const company = companyName || 'your company';
   const linkedin = masterResume?.linkedin || '';
   const github = masterResume?.github || '';
-  const portfolio = masterResume?.website || 'https://drive.google.com/file/d/1bN0IYYY6qEd2XJk9SaWhLeiW3FjJqens/view?usp=sharing';
+  const portfolio = masterResume?.website || '';
   const resumeUrl = masterResume?.resumeUrl || portfolio;
 
   // Extract skills string
@@ -93,13 +93,8 @@ export function generateTailoredResume(
 ) {
   const jdText = (jobDescription || '').toLowerCase();
 
-  const defaultSkillsList = [
-    'React.js', 'JavaScript', 'TypeScript', 'Redux', 'Node.js',
-    'Express.js', 'MongoDB', 'REST APIs', 'Tailwind CSS', 'Material UI',
-    'Next.js', 'AWS', 'Docker', 'WebSockets', 'CI/CD'
-  ];
 
-  const matched = defaultSkillsList.filter(skill => jdText.includes(skill.toLowerCase()));
+const matched = extractSkills(jobDescription).map((s) => s.label);
 
   // If a custom template is provided, use it
   if (template && (template.body || template.subject)) {

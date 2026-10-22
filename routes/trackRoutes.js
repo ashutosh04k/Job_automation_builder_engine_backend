@@ -84,8 +84,14 @@ router.get('/click/:targetId', async (req, res) => {
   const rawTargetId = req.params.targetId;
   const cleanTargetId = rawTargetId.replace(/\.(png|gif|jpg|jpeg)$/i, '');
 
-  const fallbackUrl = 'https://drive.google.com/file/d/1bN0IYYY6qEd2XJk9SaWhLeiW3FjJqens/view?usp=sharing';
-  const destination = url ? decodeURIComponent(url) : fallbackUrl;
+  // Only redirect to http(s) URLs; anything else (javascript:, data:, missing) goes home.
+  let destination = '/';
+  try {
+    const parsed = new URL(decodeURIComponent(url || ''));
+    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') destination = parsed.href;
+  } catch {
+    destination = '/';
+  }
 
   try {
     if (isMongoConnected() && mongoose.Types.ObjectId.isValid(cleanTargetId)) {

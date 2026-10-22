@@ -8,6 +8,9 @@ import {
 } from '../services/storageService.js';
 import { processTargetExecution, executeDaily9AMCronJob } from '../services/cronService.js';
 import { requireAuth } from '../middleware/authMiddleware.js';
+import { cleanCompanyName, resolveRole } from '../shared/jobMeta.js';
+import { getMasterResume } from '../services/storageService.js';
+import { safeScore, rescoreUserTargets } from '../services/atsService.js';
 
 const router = express.Router();
 
@@ -57,16 +60,24 @@ router.post('/', async (req, res) => {
     }
 
     const userId = req.userId || null;
+    const jd = (jobDescription || '').trim();
+    const master = await getMasterResume(userId);
+    const report = await safeScore(master, {
+      jobDescription: jd,
+      targetRole: resolveRole(targetRole, jd, master?.title || '')
+    });
+
     const newTarget = await createJobTarget({
       email,
-      jobDescription: (jobDescription || '').trim(),
+      jobDescription: jd,
       targetRole: targetRole || 'Software Engineer',
-      companyName: companyName || 'Target Company'
+      companyName: cleanCompanyName(companyName) || 'Target Company',
+      atsScore: report?.score ?? null
     }, userId);
 
     res.status(201).json({ 
       success: true, 
-      message: 'Job Target saved! Daily 9:00 AM Cron Email dispatch active for ' + email, 
+      message: `Job target saved. It will be emailed once in the next daily run to ${email}.`, 
       data: newTarget 
     });
   } catch (err) {
@@ -124,10 +135,21 @@ router.post('/:id/trigger', async (req, res) => {
   }
 });
 
+// POST recompute ATS scores for all of this user's targets
+router.post('/rescore', async (req, res) => {
+  try {
+    const summary = await rescoreUserTargets(req.userId);
+    res.json({ success: true, message: `Rescored ${summary.total} target(s).`, ...summary });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST trigger daily 9 AM batch cron manually
 router.post('/trigger-all-cron', async (req, res) => {
   try {
-    const summary = await executeDaily9AMCronJob('manual');
+    const isAdmin = req.user?.role === 'admin';
+    const summary = await executeDaily9AMCronJob('manual', { onlyUserId: isAdmin ? null : req.userId });
     res.json({ success: true, message: 'Daily 9 AM cron job triggered manually.', summary });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

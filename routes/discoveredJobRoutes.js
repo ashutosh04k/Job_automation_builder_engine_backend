@@ -6,12 +6,14 @@ import {
   deleteDiscoveredJob,
   createJobTarget
 } from '../services/storageService.js';
-import { optionalAuth } from '../middleware/authMiddleware.js';
+import { requireAuth } from '../middleware/authMiddleware.js';
+import { cleanCompanyName } from '../shared/jobMeta.js';
+import { getMasterResume } from '../services/storageService.js';
+import { safeScore } from '../services/atsService.js';
 
 const router = express.Router();
 
-// Use optionalAuth so that if token is sent by extension or web portal, req.userId is populated
-router.use(optionalAuth);
+router.use(requireAuth);
 
 /**
  * GET /api/discovered-jobs
@@ -69,7 +71,17 @@ router.post('/batch', async (req, res) => {
     }
 
     const userId = req.userId || null;
-    const result = await saveDiscoveredJobsBatch(jobs, userId);
+    // Score only jobs that came with a real description (search-result cards usually don't).
+    const master = await getMasterResume(userId);
+    const scored = [];
+    for (const job of jobs.slice(0, 100)) {
+      const jd = job.jobDescription || '';
+      const report = jd.trim()
+        ? await safeScore(master, { jobDescription: jd, targetRole: job.title || job.jobTitle || '' })
+        : null;
+      scored.push({ ...job, atsScore: report?.score ?? null });
+    }
+    const result = await saveDiscoveredJobsBatch(scored, userId);
 
     return res.json({
       success: true,
@@ -139,13 +151,22 @@ router.post('/:id/queue-target', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Discovered job not found.' });
     }
 
-    const recipientEmail = email || `careers@${(job.company || 'company').toLowerCase().replace(/[^a-z0-9]/g, '')}.com`;
+    // Never guess an address: guessed emails bounce and damage sender reputation.
+    const recipientEmail = String(email || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
+      return res.status(400).json({ success: false, error: 'A valid recruiter email is required to queue this job.' });
+    }
+
+    const jobDescription = job.jobDescription || `${job.title} at ${job.company}. Location: ${job.location || 'Remote'}. Job URL: ${job.jobUrl || ''}`;
+    const targetRole = job.title || 'Software Developer';
+    const report = await safeScore(await getMasterResume(userId), { jobDescription, targetRole });
 
     const newTarget = await createJobTarget({
       email: recipientEmail,
-      jobDescription: job.jobDescription || `${job.title} at ${job.company}. Location: ${job.location || 'Remote'}. Job URL: ${job.jobUrl || ''}`,
-      targetRole: job.title || 'Software Developer',
-      companyName: job.company || 'Company'
+      jobDescription,
+      targetRole,
+      companyName: cleanCompanyName(job.company) || 'Target Company',
+      atsScore: report?.score ?? null
     }, userId);
 
     // Update status of discovered job to 'queued'

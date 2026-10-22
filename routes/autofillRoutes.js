@@ -2,16 +2,17 @@ import express from 'express';
 import AutoFillProfile from '../models/AutoFillProfile.js';
 import User from '../models/User.js';
 import { requireAuth, optionalAuth } from '../middleware/authMiddleware.js';
+import { getMasterResume } from '../services/storageService.js';
 
 const router = express.Router();
 
-export const DEFAULT_QA_RULES = [
+const RULE_TEMPLATES = [
   {
     id: 'first_name',
     category: 'Contact',
     question: 'First Name',
     keywords: ['first name', 'fname', 'given name', 'forename'],
-    answer: 'Ashutosh',
+    answer: '',
     type: 'text',
     isDefault: true
   },
@@ -20,7 +21,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Contact',
     question: 'Last Name',
     keywords: ['last name', 'lname', 'surname', 'family name'],
-    answer: 'Kumar',
+    answer: '',
     type: 'text',
     isDefault: true
   },
@@ -29,7 +30,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Contact',
     question: 'Full Name',
     keywords: ['full name', 'applicant name', 'candidate name', 'your name'],
-    answer: 'Ashutosh Kumar',
+    answer: '',
     type: 'text',
     isDefault: true
   },
@@ -38,7 +39,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Contact',
     question: 'Email ID',
     keywords: ['email id', 'email', 'e-mail', 'email address', 'electronic mail'],
-    answer: 'kumarasutosh2014@gmail.com',
+    answer: '',
     type: 'text',
     isDefault: true
   },
@@ -47,7 +48,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Contact',
     question: 'Contact Number',
     keywords: ['contact number', 'phone', 'mobile', 'cell', 'telephone', 'phone number', 'contact no'],
-    answer: '8521975695',
+    answer: '',
     type: 'text',
     isDefault: true
   },
@@ -56,7 +57,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Links',
     question: 'Linkedin URL',
     keywords: ['linkedin url', 'linkedin', 'linked-in', 'linkedin profile'],
-    answer: 'https://www.linkedin.com/in/ashutosh-kumar-sde',
+    answer: '',
     type: 'text',
     isDefault: true
   },
@@ -65,7 +66,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Links',
     question: 'GitHub URL',
     keywords: ['github url', 'github', 'git-hub', 'github profile'],
-    answer: 'https://github.com/ashutosh04k',
+    answer: '',
     type: 'text',
     isDefault: true
   },
@@ -74,7 +75,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Links',
     question: 'Portfolio / Website URL',
     keywords: ['portfolio', 'portfolio url', 'website', 'personal website', 'personal url'],
-    answer: 'https://drive.google.com/file/d/1bN0IYYY6qEd2XJk9SaWhLeiW3FjJqens/view?usp=sharing',
+    answer: '',
     type: 'text',
     isDefault: true
   },
@@ -83,7 +84,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Links',
     question: 'Resume Link / Google Drive URL',
     keywords: ['resume link', 'resume url', 'cv link', 'cv url', 'link to resume', 'google drive resume'],
-    answer: 'https://drive.google.com/file/d/1bN0IYYY6qEd2XJk9SaWhLeiW3FjJqens/view?usp=sharing',
+    answer: '',
     type: 'text',
     isDefault: true
   },
@@ -92,7 +93,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Experience',
     question: 'Total years of experience',
     keywords: ['total years of experience', 'years experience', 'total experience', 'yoe', 'experience years', 'work experience'],
-    answer: '3.5',
+    answer: '',
     type: 'text',
     isDefault: true
   },
@@ -101,7 +102,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Experience',
     question: 'Current Job Title / Role',
     keywords: ['job title', 'current role', 'current title', 'headline', 'position'],
-    answer: 'Full Stack Developer',
+    answer: '',
     type: 'text',
     isDefault: true
   },
@@ -110,7 +111,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Experience',
     question: 'Current Company / Employer',
     keywords: ['current company', 'employer', 'present company', 'organization'],
-    answer: 'Tech Corp',
+    answer: '',
     type: 'text',
     isDefault: true
   },
@@ -119,7 +120,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Experience',
     question: 'Notice Period / Availability',
     keywords: ['notice period', 'notice', 'availability', 'how soon can you start'],
-    answer: 'Immediate / 15 Days',
+    answer: '',
     type: 'text',
     isDefault: true
   },
@@ -128,7 +129,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Contact',
     question: 'Current City / Location',
     keywords: ['city', 'current city', 'location', 'current location'],
-    answer: 'Bengaluru',
+    answer: '',
     type: 'text',
     isDefault: true
   },
@@ -137,7 +138,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Contact',
     question: 'Country',
     keywords: ['country', 'nationality'],
-    answer: 'India',
+    answer: '',
     type: 'text',
     isDefault: true
   },
@@ -146,7 +147,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Education',
     question: 'Highest Degree / Qualification',
     keywords: ['degree', 'highest qualification', 'education level', 'major'],
-    answer: 'Bachelor of Technology (B.Tech)',
+    answer: '',
     type: 'text',
     isDefault: true
   },
@@ -155,7 +156,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Education',
     question: 'University / College',
     keywords: ['school', 'university', 'college', 'institution'],
-    answer: 'VTU',
+    answer: '',
     type: 'text',
     isDefault: true
   },
@@ -164,7 +165,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Experience',
     question: 'Key Skills & Technologies',
     keywords: ['skills', 'key skills', 'technologies', 'tech stack'],
-    answer: 'React.js, Next.js, TypeScript, Node.js, Express.js, MongoDB, Redux, REST APIs, WebSockets, Tailwind CSS, Material UI, AWS, Docker, CI/CD',
+    answer: '',
     type: 'textarea',
     isDefault: true
   },
@@ -173,7 +174,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Custom Q&A',
     question: 'Cover Letter / Elevator Pitch / Why should we hire you?',
     keywords: ['cover letter', 'pitch', 'why hire', 'why should we hire you', 'additional info', 'message to hiring'],
-    answer: 'I am a Full Stack Developer with 3+ years of experience building scalable production applications with React.js, Next.js, TypeScript, Node.js, and MongoDB.',
+    answer: '',
     type: 'textarea',
     isDefault: true
   },
@@ -182,7 +183,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Custom Q&A',
     question: 'Are you legally authorized to work in this country?',
     keywords: ['authorized to work', 'legally authorized', 'eligible to work'],
-    answer: 'Yes',
+    answer: '',
     type: 'select',
     isDefault: true
   },
@@ -191,7 +192,7 @@ export const DEFAULT_QA_RULES = [
     category: 'Custom Q&A',
     question: 'Will you now or in the future require visa sponsorship?',
     keywords: ['require sponsorship', 'visa sponsorship', 'need sponsorship'],
-    answer: 'No',
+    answer: '',
     type: 'select',
     isDefault: true
   },
@@ -200,25 +201,50 @@ export const DEFAULT_QA_RULES = [
     category: 'Custom Q&A',
     question: 'Are you willing to relocate?',
     keywords: ['relocate', 'willing to relocate', 'relocation'],
-    answer: 'Yes, open to relocation',
+    answer: '',
     type: 'text',
     isDefault: true
   }
 ];
 
-function getDefaultsForUser(user) {
-  if (!user) return DEFAULT_QA_RULES;
-  const nameParts = (user.name || '').trim().split(/\s+/);
-  const firstName = nameParts[0] || 'Ashutosh';
-  const lastName = nameParts.slice(1).join(' ') || 'Kumar';
+export const DEFAULT_QA_RULES = RULE_TEMPLATES.map((r) => ({ ...r, answer: '' }));
 
-  return DEFAULT_QA_RULES.map(r => {
-    if (r.id === 'first_name') return { ...r, answer: firstName };
-    if (r.id === 'last_name') return { ...r, answer: lastName };
-    if (r.id === 'full_name') return { ...r, answer: user.name || 'Ashutosh Kumar' };
-    if (r.id === 'email') return { ...r, answer: user.email || 'kumarasutosh2014@gmail.com' };
-    return r;
-  });
+// Fill answers from the user's own profile. Anything we can't derive stays
+// blank so the extension skips it instead of typing a wrong value.
+async function getDefaultsForUser(user) {
+  if (!user) return DEFAULT_QA_RULES;
+  let m = {};
+  try {
+    m = (await getMasterResume(user._id || user.id || null)) || {};
+  } catch {
+    m = {};
+  }
+  const fullName = (m.fullName || user.name || '').trim();
+  const [firstName = '', ...rest] = fullName.split(/\s+/);
+  const latestJob = (m.experience || [])[0] || {};
+  const edu = (m.education || [])[0] || {};
+  const skills = (m.skills || []).flatMap((g) => g.items || []).slice(0, 15).join(', ');
+
+  const answers = {
+    first_name: firstName,
+    last_name: rest.join(' '),
+    full_name: fullName,
+    email: m.email || user.email || '',
+    phone: m.phone || '',
+    linkedin: m.linkedin || '',
+    github: m.github || '',
+    portfolio: m.website || '',
+    resume_link: m.resumeUrl || m.website || '',
+    current_title: latestJob.role || '',
+    current_company: /present|current/i.test(latestJob.period || '') ? latestJob.company || '' : '',
+    city: m.location || '',
+    degree: edu.degree || '',
+    school: edu.institution || '',
+    skills,
+    cover_letter: m.summary || ''
+  };
+
+  return DEFAULT_QA_RULES.map((r) => (r.id in answers ? { ...r, answer: answers[r.id] } : r));
 }
 
 /**
@@ -230,7 +256,7 @@ router.get('/', optionalAuth, async (req, res) => {
     if (req.userId) {
       let profile = await AutoFillProfile.findOne({ userId: req.userId });
       if (!profile || !profile.rules || profile.rules.length === 0) {
-        const initialRules = getDefaultsForUser(req.user);
+        const initialRules = await getDefaultsForUser(req.user);
         profile = new AutoFillProfile({
           userId: req.userId,
           rules: initialRules
@@ -279,7 +305,7 @@ router.post('/', requireAuth, async (req, res) => {
  */
 router.post('/reset', requireAuth, async (req, res) => {
   try {
-    const freshRules = getDefaultsForUser(req.user);
+    const freshRules = await getDefaultsForUser(req.user);
     let profile = await AutoFillProfile.findOne({ userId: req.userId });
     if (profile) {
       profile.rules = freshRules;

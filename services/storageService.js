@@ -8,7 +8,8 @@ import LogEntry from '../models/LogEntry.js';
 import User from '../models/User.js';
 import EmailTemplate from '../models/EmailTemplate.js';
 import DiscoveredJob from '../models/DiscoveredJob.js';
-
+import { extractSkills } from '../shared/keywords.js';
+import { cleanCompanyName } from '../shared/jobMeta.js';
 const DATA_DIR = path.resolve(process.cwd(), 'data_store');
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -88,30 +89,6 @@ export async function migrateOrphanRecordsToUser(userId) {
   }
 }
 
-// Candidate Skills Dictionary for ATS Scoring
-const CANDIDATE_ATS_SKILLS = [
-  'react', 'react.js', 'next.js', 'nextjs', 'typescript', 'javascript', 'node', 'node.js',
-  'express', 'mongodb', 'sql', 'postgres', 'postgresql', 'mysql', 'aws', 'docker', 'kubernetes',
-  'redux', 'rtk query', 'tailwind', 'material ui', 'websockets', 'firebase', 'stripe', 'payment',
-  'ci/cd', 'github actions', 'nginx', 'graphql', 'rest api', 'microservices', 'seo', 'crm',
-  'llm', 'ai', 'langchain', 'jest', 'cypress', 'performance', 'virtualization', 'memoization',
-  'rbac', 'push notification', 'google maps', 'tracking', 'order', 'ecommerce', 'e-commerce',
-  'saas', 'python', 'java', 'frontend', 'backend', 'full stack', 'cloud', 'architecture'
-];
-
-export function calculateAtsScore(jobDescription = '', targetRole = '') {
-  const text = `${jobDescription || ''} ${targetRole || ''}`.toLowerCase();
-  if (!text.trim()) return 86;
-
-  let matches = 0;
-  for (const skill of CANDIDATE_ATS_SKILLS) {
-    if (text.includes(skill)) matches++;
-  }
-
-  // Base score 82 for LaTeX single-page template with metrics, +2 for each keyword up to 98%
-  return Math.min(98, 82 + Math.min(16, matches * 2));
-}
-
 // --- JOB TARGETS STORAGE WITH USER-SCOPING & PAGINATION ---
 export async function getJobTargets(options = {}, userId = null) {
   const page = parseInt(options.page || 1, 10);
@@ -158,12 +135,8 @@ export async function getJobTargets(options = {}, userId = null) {
     );
   }
 
-  // Populate ATS Match Score for each target
-  allTargets.forEach(t => {
-    if (!t.atsScore) {
-      t.atsScore = calculateAtsScore(t.jobDescription, t.targetRole);
-    }
-  });
+  // atsScore is stored when a target is created/rescored (services/atsService.js).
+  // Missing means "not scored yet" — shown as "—", never a made-up number.
 
   if (fetchAll) {
     return allTargets;
@@ -191,7 +164,7 @@ export async function createJobTarget(data, userId = null) {
   let createdDoc = null;
   const targetId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
-  const atsScore = calculateAtsScore(data.jobDescription, data.targetRole);
+  const atsScore = typeof data.atsScore === 'number' ? data.atsScore : null;
 
   const newTargetObj = {
     _id: targetId,
@@ -302,31 +275,18 @@ export async function getJobTargetById(id, userId = null) {
     }
   }
   const localTargets = readJsonFile('job_targets', []);
-  return localTargets.find(t => t._id?.toString() === id?.toString()) || null;
+  return localTargets.find(t =>
+    t._id?.toString() === id?.toString() &&
+    (!userId || t.userId?.toString() === userId.toString())
+  ) || null;
 }
 
 // --- MASTER RESUME STORAGE WITH USER-SCOPING ---
 export async function getMasterResume(userId = null) {
   const defaultMaster = {
-    fullName: 'Ashutosh Kumar',
-    email: 'kumarasutosh2014@gmail.com',
-    phone: '8521975695',
-    location: 'Gurgaon, Haryana',
-    title: 'Software Developer | Full Stack Developer',
-    summary: 'Full Stack Software Developer with 3+ years of experience building scalable web applications, REST APIs, real-time systems, CRM platforms, and data-intensive workflows using React.js, Node.js, MongoDB, TypeScript, AWS, and Docker.',
-    website: 'https://drive.google.com/file/d/1bN0IYYY6qEd2XJk9SaWhLeiW3FjJqens/view?usp=sharing',
-    resumeUrl: 'https://drive.google.com/file/d/1bN0IYYY6qEd2XJk9SaWhLeiW3FjJqens/view?usp=sharing',
-    linkedin: 'https://www.linkedin.com/in/ashutosh-kumar-sde',
-    github: 'https://github.com/ashutosh04k',
-    skills: [
-      { category: 'Frontend', items: ['React.js', 'Next.js', 'JavaScript', 'TypeScript', 'Redux', 'RTK Query', 'HTML5/CSS3', 'Tailwind CSS'] },
-      { category: 'Backend & Databases', items: ['Node.js', 'Express.js', 'REST APIs', 'WebSockets', 'MongoDB', 'SQL', 'Mongoose'] },
-      { category: 'Cloud & DevOps', items: ['AWS', 'EC2', 'S3', 'Docker', 'GitHub Actions', 'CI/CD', 'Nginx', 'Firebase'] },
-      { category: 'Testing & Engineering', items: ['Jest', 'React Testing Library', 'API Testing', 'RBAC', 'Performance Optimization', 'DSA', 'OOP'] }
-    ],
-    experience: [],
-    education: [],
-    projects: []
+    fullName: '', email: '', phone: '', location: '', title: '', summary: '',
+    website: '', resumeUrl: '', linkedin: '', github: '',
+    skills: [], experience: [], education: [], projects: []
   };
 
   if (isMongoConnected()) {
@@ -393,13 +353,14 @@ export async function saveMasterResume(data, userId = null) {
 // --- SETTINGS STORAGE WITH USER-SCOPING ---
 export async function getSettings(userId = null) {
   const defaultSettings = {
-    smtpHost: 'smtp.gmail.com',
-    smtpPort: 587,
+    smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
+    smtpPort: Number(process.env.SMTP_PORT) || 587,
     smtpSecure: false,
-    smtpUser: 'kumarasutosh2014@gmail.com',
-    smtpPass: 'pylsdzasipezfrju',
-    senderName: 'Ashutosh kumar',
-    senderEmail: 'kumarasutosh2014@gmail.com',
+    // Credentials are never stored as code defaults; per-user values come from Settings.
+    smtpUser: '',
+    smtpPass: '',
+    senderName: '',
+    senderEmail: '',
     cronTime: '0 9 * * *',
     enableCron: true
   };
@@ -775,9 +736,9 @@ export async function saveDiscoveredJobsBatch(jobs = [], userId = null) {
   const processed = jobs.map(raw => {
     const isEasy = Boolean(raw.isEasyApply || raw.applyType === 'easy_apply');
     const roleTitle = (raw.title || raw.jobTitle || 'Software Developer').trim();
-    const company = (raw.company || raw.companyName || 'Unknown Company').trim();
+    const company = cleanCompanyName(raw.company || raw.companyName || '') || 'Unknown Company';
     const jd = raw.jobDescription || '';
-    const atsScore = calculateAtsScore(jd, roleTitle);
+    const atsScore = typeof raw.atsScore === 'number' ? raw.atsScore : null;
 
     return {
       userId: userId ? (typeof userId === 'string' ? new mongoose.Types.ObjectId(userId) : userId) : undefined,

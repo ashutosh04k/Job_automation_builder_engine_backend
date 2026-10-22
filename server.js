@@ -1,6 +1,6 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import path from 'path';
 import fs from 'fs';
@@ -16,14 +16,15 @@ import { initCronService } from './services/cronService.js';
 import { getJobTargets, migrateOrphanRecordsToUser } from './services/storageService.js';
 import User from './models/User.js';
 
-dotenv.config();
-
 const app = express();
 const PORT = process.env.PORT || 5001;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/resume_cron_db';
 
 // Middleware
-app.use(cors());
+const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean);
+app.use(cors(allowedOrigins.length ? {
+  origin: (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin) || origin.startsWith('chrome-extension://'))
+} : undefined));
 app.use(express.json({ limit: '10mb' }));
 
 // Healthcheck Route
@@ -31,7 +32,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'OK',
     service: 'MERN Resume Automation Backend (Multi-Tenant)',
-    cronSchedule: '0 9 * * * (9:00 AM Daily)',
+    cronEnabled: process.env.ENABLE_CRON !== 'false',
     dbState: mongoose.connection.readyState === 1 ? 'MongoDB Atlas Connected' : 'Persistent Disk Storage (JSON)',
     timestamp: new Date()
   });
@@ -62,6 +63,11 @@ if (fs.existsSync(distPath)) {
 
 // Start Server with Dual Persistence & Graceful Error Handling
 async function startServer() {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+    console.error('❌ JWT_SECRET must be set (32+ chars). Generate one: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))"');
+    process.exit(1);
+  }
+
   try {
     console.log(`Connecting to MongoDB Atlas at: ${MONGO_URI.substring(0, 35)}...`);
     await mongoose.connect(MONGO_URI, {
@@ -71,21 +77,24 @@ async function startServer() {
 
     // Seed or locate primary admin account & run multi-tenant migration
     try {
-      let primaryUser = await User.findOne({ email: 'kumarasutosh2014@gmail.com' });
-      if (!primaryUser) {
+      const adminEmail = (process.env.PRIMARY_USER_EMAIL || '').trim().toLowerCase();
+      let primaryUser = adminEmail ? await User.findOne({ email: adminEmail }) : null;
+      if (!primaryUser && adminEmail && process.env.PRIMARY_USER_PASSWORD) {
         primaryUser = new User({
-          name: 'Ashutosh Kumar',
-          email: 'kumarasutosh2014@gmail.com',
-          password: process.env.PRIMARY_USER_PASSWORD || 'Ashutosh@2026',
+          name: process.env.PRIMARY_USER_NAME || 'Admin',
+          email: adminEmail,
+          password: process.env.PRIMARY_USER_PASSWORD,
           role: 'admin',
-          senderName: 'Ashutosh Kumar',
-          senderEmail: 'kumarasutosh2014@gmail.com'
+          senderName: process.env.PRIMARY_USER_NAME || '',
+          senderEmail: adminEmail
         });
         await primaryUser.save();
-        console.log('✅ Initialized primary admin account: kumarasutosh2014@gmail.com');
+        console.log(`✅ Initialized primary admin account: ${adminEmail}`);
+      } else if (!primaryUser) {
+        console.warn('⚠️ PRIMARY_USER_EMAIL / PRIMARY_USER_PASSWORD not set — skipping admin seeding.');
       }
 
-      await migrateOrphanRecordsToUser(primaryUser._id);
+      if (primaryUser) await migrateOrphanRecordsToUser(primaryUser._id);
     } catch (migErr) {
       console.warn('⚠️ Primary user seeding/migration notice:', migErr.message);
     }
@@ -110,7 +119,6 @@ async function startServer() {
   const server = app.listen(PORT, () => {
     console.log(`=======================================================`);
     console.log(`🚀 Multi-Tenant AutoResume Server running on http://localhost:${PORT}`);
-    console.log(`⏰ Daily Cron Job active: Scheduled for 9:00 AM Every Morning`);
     console.log(`=======================================================`);
   });
 

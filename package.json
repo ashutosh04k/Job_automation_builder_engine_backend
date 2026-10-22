@@ -6,7 +6,10 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "cleanup:data": "node scripts/cleanup-data.js",
+    "test": "node --test tests/*.test.js",
+    "ats:check": "node scripts/ats-check.js"
   },
   "dependencies": {
     "@getbrevo/brevo": "^6.0.3",

@@ -43,7 +43,7 @@ const jobTargetSchema = new mongoose.Schema(
     },
     atsScore: {
       type: Number,
-      default: 85,
+      default: null,
     },
     status: {
       type: String,

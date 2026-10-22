@@ -2,11 +2,15 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
-import { getMasterResume, saveMasterResume, getEmailTemplate, getJobTargetById, getDiscoveredJobs } from '../services/storageService.js';
+import { getMasterResume, saveMasterResume, getEmailTemplate, getJobTargetById, getDiscoveredJobs, updateJobTarget } from '../services/storageService.js';
 import { generateTailoredResume } from '../services/resumeTailorService.js';
 import { generateResumePDF } from '../services/pdfService.js';
 import { requireAuth, optionalAuth } from '../middleware/authMiddleware.js';
+import { SKILLS } from '../shared/keywords.js';
 import User from '../models/User.js';
+import { resolveRole, resolveCompany } from '../shared/jobMeta.js';
+import { isPrimaryUser } from '../shared/owner.js';
+import { tailorAndScore, rescoreUserTargets } from '../services/atsService.js';
 
 const router = express.Router();
 
@@ -56,6 +60,8 @@ router.get('/', requireAuth, async (req, res) => {
 router.post('/', requireAuth, async (req, res) => {
   try {
     const updated = await saveMasterResume(req.body, req.userId || null);
+    // Scores depend on the resume, so refresh them in the background.
+    rescoreUserTargets(req.userId).catch((e) => console.warn('[ATS] rescore after save failed:', e.message));
     res.json({ success: true, message: 'Master resume profile updated', data: updated });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -98,7 +104,7 @@ router.post('/upload-pdf', requireAuth, upload.single('resumePdf'), async (req, 
 router.get('/pdf-status', requireAuth, (req, res) => {
   try {
     const userPdf = req.userId ? path.join(UPLOADS_DIR, req.userId.toString(), 'my_resume.pdf') : null;
-    const isOwner = req.user?.email === 'kumarasutosh2014@gmail.com';
+    const isOwner = isPrimaryUser(req.user?.email);
     const globalPdf = isOwner ? path.join(UPLOADS_DIR, 'my_resume.pdf') : null;
     const activePdf = (userPdf && fs.existsSync(userPdf)) ? userPdf : (globalPdf && fs.existsSync(globalPdf) ? globalPdf : null);
 
@@ -122,7 +128,7 @@ router.get('/pdf-status', requireAuth, (req, res) => {
 // GET Download/View Uploaded PDF (tenant-scoped)
 router.get('/download-pdf', requireAuth, (req, res) => {
   const userPdf = req.userId ? path.join(UPLOADS_DIR, req.userId.toString(), 'my_resume.pdf') : null;
-  const isOwner = req.user?.email === 'kumarasutosh2014@gmail.com';
+  const isOwner = isPrimaryUser(req.user?.email);
   const globalPdf = isOwner ? path.join(UPLOADS_DIR, 'my_resume.pdf') : null;
   const activePdf = (userPdf && fs.existsSync(userPdf)) ? userPdf : (globalPdf && fs.existsSync(globalPdf) ? globalPdf : null);
 
@@ -135,25 +141,14 @@ router.get('/download-pdf', requireAuth, (req, res) => {
 });
 
 // POST Preview Tailored HTML Email Body (tenant-scoped)
-router.post('/preview', optionalAuth, async (req, res) => {
+router.post('/preview', requireAuth, async (req, res) => {
   try {
     let { jobDescription, targetRole, companyName } = req.body;
     const master = await getMasterResume(req.userId || null);
     const template = await getEmailTemplate(req.userId || null);
 
-    if (!targetRole || targetRole === 'Software Developer' || targetRole === 'Software Engineer' || targetRole === 'Software Developer | Frontend / Full Stack') {
-      const m = (jobDescription || '').match(/^Role:\s*(.+)$/m);
-      if (m && m[1].trim()) {
-        targetRole = m[1].trim();
-      }
-    }
-
-    if (!companyName || companyName === 'Target Company' || companyName === 'your company' || companyName === 'Tech Corp') {
-      const mc = (jobDescription || '').match(/^Company:\s*(.+)$/m);
-      if (mc && mc[1].trim()) {
-        companyName = mc[1].trim();
-      }
-    }
+    targetRole = resolveRole(targetRole, jobDescription);
+    companyName = resolveCompany(companyName, jobDescription);
 
     const preview = generateTailoredResume(
       master, 
@@ -170,24 +165,13 @@ router.post('/preview', optionalAuth, async (req, res) => {
 });
 
 // POST Generate and stream tailored ATS PDF resume directly
-router.post('/tailored-pdf', optionalAuth, async (req, res) => {
+router.post('/tailored-pdf', requireAuth, async (req, res) => {
   try {
     let { jobDescription, targetRole, companyName } = req.body;
     const master = await getMasterResume(req.userId || null);
 
-    if (!targetRole || targetRole === 'Software Developer' || targetRole === 'Software Engineer' || targetRole === 'Software Developer | Frontend / Full Stack') {
-      const m = (jobDescription || '').match(/^Role:\s*(.+)$/m);
-      if (m && m[1].trim()) {
-        targetRole = m[1].trim();
-      }
-    }
-
-    if (!companyName || companyName === 'Target Company' || companyName === 'your company' || companyName === 'Tech Corp') {
-      const mc = (jobDescription || '').match(/^Company:\s*(.+)$/m);
-      if (mc && mc[1].trim()) {
-        companyName = mc[1].trim();
-      }
-    }
+    targetRole = resolveRole(targetRole, jobDescription);
+    companyName = resolveCompany(companyName, jobDescription);
 
     const pdfBuffer = await generateResumePDF(master, {
       targetRole: targetRole || 'Software Developer',
@@ -195,19 +179,19 @@ router.post('/tailored-pdf', optionalAuth, async (req, res) => {
       jobDescription: jobDescription || ''
     });
 
-    const cleanName = (master?.fullName || 'Ashutosh_Kumar').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanName = (master?.fullName || 'Resume').replace(/[^a-zA-Z0-9_-]/g, '_');
     const cleanRole = (targetRole || 'Resume').replace(/[^a-zA-Z0-9_-]/g, '_');
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${cleanName}_${cleanRole}.pdf"`);
     res.send(pdfBuffer);
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(isProfileError(err) ? 400 : 500).json({ success: false, error: err.message });
   }
 });
 
 // GET Stream tailored ATS PDF resume for a specific target
-router.get('/tailored-pdf/:targetId', optionalAuth, async (req, res) => {
+router.get('/tailored-pdf/:targetId', requireAuth, async (req, res) => {
   try {
     const target = await getJobTargetById(req.params.targetId, req.userId || null);
     if (!target) {
@@ -216,18 +200,8 @@ router.get('/tailored-pdf/:targetId', optionalAuth, async (req, res) => {
 
     const master = await getMasterResume(req.userId || null);
 
-    let role = target.targetRole;
-    if (!role || role === 'Software Developer' || role === 'Software Engineer' || role === 'Software Developer | Frontend / Full Stack') {
-      const m = (target.jobDescription || '').match(/^Role:\s*(.+)$/m);
-      if (m && m[1].trim()) role = m[1].trim();
-    }
-    role = role || master?.title || 'Software Developer';
-
-    let company = target.companyName;
-    if (!company || company === 'Target Company' || company === 'your company' || company === 'Tech Corp') {
-      const mc = (target.jobDescription || '').match(/^Company:\s*(.+)$/m);
-      if (mc && mc[1].trim()) company = mc[1].trim();
-    }
+    const role = resolveRole(target.targetRole, target.jobDescription, master?.title || 'Software Developer');
+    const company = resolveCompany(target.companyName, target.jobDescription);
 
     const pdfBuffer = await generateResumePDF(master, {
       targetRole: role,
@@ -235,19 +209,19 @@ router.get('/tailored-pdf/:targetId', optionalAuth, async (req, res) => {
       jobDescription: target.jobDescription || ''
     });
 
-    const cleanName = (master?.fullName || 'Ashutosh_Kumar').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanName = (master?.fullName || 'Resume').replace(/[^a-zA-Z0-9_-]/g, '_');
     const cleanRole = (role || 'Resume').replace(/[^a-zA-Z0-9_-]/g, '_');
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${cleanName}_${cleanRole}.pdf"`);
     res.send(pdfBuffer);
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(isProfileError(err) ? 400 : 500).json({ success: false, error: err.message });
   }
 });
 
 // GET Stream tailored ATS PDF resume for a discovered job
-router.get('/tailored-pdf/discovered/:id', optionalAuth, async (req, res) => {
+router.get('/tailored-pdf/discovered/:id', requireAuth, async (req, res) => {
   try {
     const result = await getDiscoveredJobs({ fetchAll: true }, req.userId || null);
     const jobs = result.data || result;
@@ -267,12 +241,93 @@ router.get('/tailored-pdf/discovered/:id', optionalAuth, async (req, res) => {
       jobDescription: jd
     });
 
-    const cleanName = (master?.fullName || 'Ashutosh_Kumar').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanName = (master?.fullName || 'Resume').replace(/[^a-zA-Z0-9_-]/g, '_');
     const cleanRole = (role || 'Resume').replace(/[^a-zA-Z0-9_-]/g, '_');
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${cleanName}_${cleanRole}.pdf"`);
     res.send(pdfBuffer);
+  } catch (err) {
+    res.status(isProfileError(err) ? 400 : 500).json({ success: false, error: err.message });
+  }
+});
+
+// Profile problems (no name / no experience) are the user's to fix -> 400, not 500.
+const isProfileError = (err) => /master resume is incomplete/i.test(err?.message || '');
+
+/**
+ * POST /api/resume/score { jobDescription, targetRole, companyName }
+ * Builds the tailored resume for this JD and scores the text it actually prints.
+ */
+router.post('/score', requireAuth, async (req, res) => {
+  try {
+    let { jobDescription = '', targetRole = '', companyName = '' } = req.body || {};
+    if (String(jobDescription).length > 50000) {
+      return res.status(413).json({ success: false, error: 'Job description is too long (50,000 characters max).' });
+    }
+    targetRole = resolveRole(targetRole, jobDescription, '');
+    companyName = resolveCompany(companyName, jobDescription);
+
+    const master = await getMasterResume(req.userId);
+    const { report } = await tailorAndScore(master, { jobDescription, targetRole, companyName });
+    res.json({ success: true, data: report });
+  } catch (err) {
+    res.status(isProfileError(err) ? 400 : 500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/resume/tailor { jobDescription, targetRole, companyName }
+ * One call for the extension: tailored PDF (base64) + its ATS report + what was changed.
+ * Score and PDF come from the same generation, so they always agree.
+ */
+router.post('/tailor', requireAuth, async (req, res) => {
+  try {
+    let { jobDescription = '', targetRole = '', companyName = '' } = req.body || {};
+    if (String(jobDescription).length > 50000) {
+      return res.status(413).json({ success: false, error: 'Job description is too long (50,000 characters max).' });
+    }
+    const master = await getMasterResume(req.userId);
+    targetRole = resolveRole(targetRole, jobDescription, master?.title || 'Software Developer');
+    companyName = resolveCompany(companyName, jobDescription);
+
+    const { report, pdf, changes } = await tailorAndScore(master, { jobDescription, targetRole, companyName });
+    const slug = (s) => String(s || '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const filename = [slug(master?.fullName) || 'Resume', slug(targetRole), slug(companyName)].filter(Boolean).join('_') + '.pdf';
+
+    res.json({
+      success: true,
+      data: { report, changes, targetRole, companyName, filename, pdfBase64: pdf.toString('base64') }
+    });
+  } catch (err) {
+    res.status(isProfileError(err) ? 400 : 500).json({ success: false, error: err.message });
+  }
+});
+
+/** GET /api/resume/score/target/:targetId — full report for a saved target; also refreshes its stored score. */
+router.get('/score/target/:targetId', requireAuth, async (req, res) => {
+  try {
+    const target = await getJobTargetById(req.params.targetId, req.userId);
+    if (!target) return res.status(404).json({ success: false, error: 'Job target not found' });
+
+    const master = await getMasterResume(req.userId);
+    const { report } = await tailorAndScore(master, {
+      jobDescription: target.jobDescription || '',
+      targetRole: resolveRole(target.targetRole, target.jobDescription, master?.title || ''),
+      companyName: resolveCompany(target.companyName, target.jobDescription)
+    });
+    if (report.score !== target.atsScore) {
+      await updateJobTarget(target._id, { atsScore: report.score }, req.userId);
+    }
+    res.json({ success: true, data: report });
+  } catch (err) {
+    res.status(isProfileError(err) ? 400 : 500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/keywords', async (req, res) => {
+  try {
+    res.json({ success: true, data: SKILLS });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

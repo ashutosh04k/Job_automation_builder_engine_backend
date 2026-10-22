@@ -1,7 +1,13 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'autoresume_super_secret_jwt_key_2026';
+function getJwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error('JWT_SECRET is missing or shorter than 32 characters.');
+  }
+  return secret;
+}
 
 function extractToken(req) {
   const authHeader = req.headers.authorization;
@@ -28,7 +34,7 @@ export async function requireAuth(req, res, next) {
       });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, getJwtSecret());
     const user = await User.findById(decoded.id).select('-password');
     if (!user) {
       return res.status(401).json({
@@ -56,7 +62,7 @@ export async function optionalAuth(req, res, next) {
   try {
     const token = extractToken(req);
     if (token) {
-      const decoded = jwt.verify(token, JWT_SECRET);
+      const decoded = jwt.verify(token, getJwtSecret());
       const user = await User.findById(decoded.id).select('-password');
       if (user) {
         req.user = user;
@@ -79,7 +85,7 @@ export function generateToken(user) {
       email: user.email,
       role: user.role
     },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: '30d' }
   );
 }

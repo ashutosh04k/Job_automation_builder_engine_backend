@@ -7,8 +7,8 @@ const masterResumeSchema = new mongoose.Schema(
     email: { type: String, default: '' },
     phone: { type: String, default: '' },
     location: { type: String, default: '' },
-    website: { type: String, default: 'https://drive.google.com/file/d/1bN0IYYY6qEd2XJk9SaWhLeiW3FjJqens/view?usp=sharing' },
-    resumeUrl: { type: String, default: 'https://drive.google.com/file/d/1bN0IYYY6qEd2XJk9SaWhLeiW3FjJqens/view?usp=sharing' },
+    website: { type: String, default: '' },
+    resumeUrl: { type: String, default: '' },
     linkedin: { type: String, default: '' },
     github: { type: String, default: '' },
     title: { type: String, default: '' },
@@ -39,6 +39,7 @@ const masterResumeSchema = new mongoose.Schema(
     projects: [
       {
         name: String,
+        link: { type: String, default: '' },
         technologies: [String],
         highlights: [String],
       },
