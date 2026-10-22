@@ -76,3 +76,16 @@ test('resume version changes when content changes, not on metadata', () => {
   assert.equal(masterResumeVersion(a), masterResumeVersion(b));
   assert.notEqual(masterResumeVersion(a), masterResumeVersion(c));
 });
+
+test('a word hyphenated across two lines is joined without a space and flagged', () => {
+  const L = (text, x = 20, size = 10) => ({ text, x, size, links: [] });
+  const { draft, warnings } = parseResumeLines([
+    L('Jane Doe', 200, 20), L('jane@example.com'),
+    L('EXPERIENCE', 20, 12),
+    L('Developer at Acme\tJan 2024 - Present'),
+    L('• Reduced load times by 45% and improved agent produc-', 30),
+    L('tivity on data-heavy screens.', 40)
+  ]);
+  assert.equal(draft.experience[0].highlights[0], 'Reduced load times by 45% and improved agent produc-tivity on data-heavy screens.');
+  assert.ok(warnings.some((w) => w.includes('produc-tivity')));
+});

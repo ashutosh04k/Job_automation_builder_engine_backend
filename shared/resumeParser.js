@@ -80,6 +80,25 @@ function isContinuation(line, prevText, bulletX, nextLine) {
   return !/[.!?;:)]$/.test(prevText.trim());
 }
 
+// Words the PDF split across lines with a hyphen ("produc-" + "tivity"), for a warning.
+let hyphenJoins = [];
+
+/**
+ * Join a wrapped line onto the text before it. A line that ends in "word-"
+ * followed by a lowercase word was split by the PDF's hyphenation: join with
+ * no space. The hyphen is kept (it may be real, as in "feature-development")
+ * and the word is reported so the user can check it.
+ */
+function joinWrapped(prev, next) {
+  const n = next.trim();
+  const m = prev.match(/([A-Za-z]+)-$/);
+  if (m && /^[a-z]/.test(n)) {
+    hyphenJoins.push(`${m[1]}-${n.split(/[\s,.;:]/)[0]}`);
+    return clean(prev + n);
+  }
+  return clean(`${prev} ${n}`);
+}
+
 // Lines belonging to bulleted items (bullet + wrapped continuation lines).
 function groupBullets(lines) {
   const out = [];
@@ -90,7 +109,7 @@ function groupBullets(lines) {
       out.push(stripBullet(l.text.replace(/\t/g, ' ')));
       bulletX = l.x;
     } else if (out.length && isContinuation(l, out[out.length - 1], bulletX, lines[k + 1])) {
-      out[out.length - 1] = clean(`${out[out.length - 1]} ${l.text.replace(/\t/g, ' ')}`);
+      out[out.length - 1] = joinWrapped(out[out.length - 1], l.text.replace(/\t/g, ' '));
     } else {
       return { bullets: out, rest: lines.slice(k) };
     }
@@ -330,6 +349,7 @@ function parseList(lines) {
  * @returns {{ draft: object, warnings: string[], unparsed: string[], stats: object }}
  */
 export function parseResumeLines(lines = []) {
+  hyphenJoins = [];
   const sizes = lines.map((l) => l.size).sort((a, b) => a - b);
   const bodySize = sizes.length ? sizes[Math.floor(sizes.length / 2)] : 10;
 
@@ -368,6 +388,9 @@ export function parseResumeLines(lines = []) {
     if (!e.role || !e.company) warnings.push(`Experience #${k + 1}: check the role and company split ("${e.role}" / "${e.company}").`);
   });
   if (!buckets.skills) warnings.push('No "Skills" section heading found.');
+  if (hyphenJoins.length) {
+    warnings.push(`These words were split across lines in the PDF. Check the hyphen is right: ${[...new Set(hyphenJoins)].join(', ')}`);
+  }
 
   const bullets = draft.experience.reduce((n, e) => n + e.highlights.length, 0)
     + draft.projects.reduce((n, p) => n + p.highlights.length, 0);
