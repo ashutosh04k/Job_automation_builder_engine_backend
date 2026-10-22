@@ -33,11 +33,11 @@ const SP_BASE = {
   sectionSkip: 5,
   sectionLineSkip: 2,
   afterRule: 5,
-  sectionIndent: 14,
+  sectionIndent: 8,
   entryTop: 3,
   itemSep: 0.5,
   entryGap: 4,
-  bulletIndent: 22,
+  bulletIndent: 14,
   labelSep: 5,
   skillLabelWidth: 100,
   rowSep: 1.2,
@@ -119,6 +119,114 @@ function applyPlan(content, plan) {
 const BLACK = '#000000';
 const LINK = '#0000ff';
 
+// ---------------------------------------------------------------------------
+// One-line bullets
+// A bullet that spills a few words onto a second line wastes a whole line.
+// For each bullet we (1) try meaning-preserving wording cuts ("in order to" ->
+// "to", "utilized" -> "used"...) and keep them only if they save a line, then
+// (2) if it is still only slightly too long, tighten word/letter spacing a
+// little at render time. Skill keywords are never touched. Long bullets that
+// really need two lines stay two lines (the editor flags them).
+// ---------------------------------------------------------------------------
+const measurer = new PDFDocument({ autoFirstPage: false });
+const LETTER_WIDTH = 612;
+/** Width available to bullet text (letter page, margins, section + bullet indent). */
+export const BULLET_TEXT_WIDTH = LETTER_WIDTH - PAGE_MARGIN.left - PAGE_MARGIN.right
+  - SP_BASE.sectionIndent - SP_BASE.bulletIndent;
+const TIGHTEN_MAX = 0.035;     // absorb up to 3.5% overflow with spacing
+const WORD_SPACING_MIN = -0.8; // pt removed per space, at most
+const CHAR_SPACING_MIN = -0.1; // pt removed per letter, at most
+
+const WORDING_RULES = [
+  [/\bin order to\b/gi, 'to'],
+  [/\butiliz(e|es|ed|ing)\b/gi, (_, e) => ({ e: 'use', es: 'uses', ed: 'used', ing: 'using' }[e.toLowerCase()])],
+  [/\bleverag(ed|ing)\b/gi, (_, e) => (e.toLowerCase() === 'ed' ? 'used' : 'using')],
+  [/\bsuccessfully\s+/gi, ''],
+  [/\ba number of\b/gi, 'several'],
+  [/\ba wide (?:range|variety) of\b/gi, 'many'],
+  [/\bapproximately\s*/gi, '~'],
+  [/\s?per ?cent\b/gi, '%'],
+  [/\bas well as\b/gi, 'and'],
+  [/\bwith the help of\b/gi, 'with'],
+  [/\bby means of\b/gi, 'via'],
+  [/\bfor the purpose of\b/gi, 'for'],
+  [/\bdue to the fact that\b/gi, 'because'],
+  [/\bon a (daily|weekly|monthly) basis\b/gi, '$1'],
+  [/\bmore than\b/gi, 'over'],
+  [/\bhelped to\b/gi, 'helped'],
+  [/\s+([,.;:])/g, '$1'],
+  [/\s{2,}/g, ' ']
+];
+
+/** Shorter wording with the same meaning (keeps the first letter's case). */
+export function tightenWording(text = '') {
+  let out = text;
+  for (const [re, to] of WORDING_RULES) out = out.replace(re, to);
+  out = out.trim();
+  if (/^[A-Z]/.test(text) && out) out = out[0].toUpperCase() + out.slice(1);
+  return out;
+}
+
+/** Printed width of a bullet with **bold** skill markup at a font size. */
+function richWidth(marked, fontSize, opts = {}) {
+  return marked.split(/(\*\*.*?\*\*)/g).filter(Boolean).reduce((w, part) => {
+    const bold = part.startsWith('**') && part.endsWith('**');
+    measurer.font(bold ? 'Times-Bold' : 'Times-Roman').fontSize(fontSize);
+    return w + measurer.widthOfString(bold ? part.slice(2, -2) : part, opts);
+  }, 0);
+}
+
+/** Spacing that squeezes a slightly-too-long line onto one line, or null. */
+function tightSpacing(marked, fontSize, avail) {
+  const w = richWidth(marked, fontSize);
+  if (w <= avail) return {};
+  if (w > avail * (1 + TIGHTEN_MAX)) return null;
+  const plain = marked.replace(/\*\*/g, '');
+  const gaps = (plain.match(/ /g) || []).length;
+  let over = w - avail + 0.5; // small safety margin
+  const wordSpacing = gaps ? Math.max(WORD_SPACING_MIN, -over / gaps) : 0;
+  over += wordSpacing * gaps;
+  const characterSpacing = over > 0 ? -over / Math.max(1, plain.length - 1) : 0;
+  if (characterSpacing < CHAR_SPACING_MIN) return null;
+  return { wordSpacing, characterSpacing };
+}
+
+const lineCount = (marked, fontSize, avail) =>
+  tightSpacing(marked, fontSize, avail) ? 1 : Math.ceil(richWidth(marked, fontSize) / avail);
+
+/** Use shorter wording for a bullet only when it saves a printed line. */
+function fitBullet(text, fontSize, jdSkills) {
+  const before = lineCount(highlightSkills(text, jdSkills), fontSize, BULLET_TEXT_WIDTH);
+  if (before === 1) return text;
+  const shorter = tightenWording(text);
+  if (shorter === text) return text;
+  return lineCount(highlightSkills(shorter, jdSkills), fontSize, BULLET_TEXT_WIDTH) < before ? shorter : text;
+}
+
+/** The view with every bullet given its shortest same-meaning wording that saves a line. */
+function fitBulletsToLines(view, scale, jdSkills) {
+  const size = FS_BASE.body * scale;
+  const fit = (list) => list.map((t) => fitBullet(t, size, jdSkills));
+  return {
+    ...view,
+    experiences: view.experiences.map((e) => ({ ...e, highlights: fit(e.highlights) })),
+    projects: view.projects.map((p) => ({ ...p, highlights: fit(p.highlights) })),
+    extras: fit(view.extras || [])
+  };
+}
+
+/** How many bullets print on one line / wrap, for a rendered view. */
+function bulletLineStats(view, scale, jdSkills) {
+  const size = FS_BASE.body * scale;
+  const all = [
+    ...view.experiences.flatMap((e) => e.highlights),
+    ...view.projects.flatMap((p) => p.highlights),
+    ...(view.extras || [])
+  ];
+  const wrapping = all.filter((t) => lineCount(highlightSkills(t, jdSkills), size, BULLET_TEXT_WIDTH) > 1).length;
+  return { oneLine: all.length - wrapping, wrapping };
+}
+
 const stripMarkers = (s = '') => String(s).replace(/\*\*/g, '');
 
 /**
@@ -128,6 +236,8 @@ const stripMarkers = (s = '') => String(s).replace(/\*\*/g, '');
  * Only spelling changes; skills you don't have are never added.
  * Lowercase JD spellings are ignored (they'd look sloppy on a resume).
  */
+const spellingKey = (t = '') => t.toLowerCase().replace(/[^a-z0-9+#]/g, '').replace(/js$/, '');
+
 function buildSpellingMirror(jd, jdSkills) {
   const forms = new Map();
   for (const skill of jdSkills) {
@@ -142,10 +252,15 @@ function buildSpellingMirror(jd, jdSkills) {
     let pos = 0;
     for (const span of findSkillSpans(src)) {
       const form = forms.get(span.skill);
-      if (!form) continue;
-      if (span.text !== form) changes.set(span.text, form);
+      // Only respell the same name ("ReactJS" -> "React.js"), never swap in a
+      // different alias ("EC2" is not "AWS").
+      if (!form || spellingKey(span.text) !== spellingKey(form)) continue;
+      // "Node JS" matches as "Node": take the trailing "JS" with it.
+      const tail = /js$/i.test(form) ? (src.slice(span.end).match(/^[\s.-]?js\b/i) || [''])[0] : '';
+      const from = span.text + tail;
+      if (from !== form) changes.set(from, form);
       out += src.slice(pos, span.start) + form;
-      pos = span.end;
+      pos = span.end + tail.length;
     }
     return out + src.slice(pos);
   };
@@ -288,13 +403,13 @@ function renderToBuffer(content, { scale, measure = false }) {
       const { m, jdSkills } = content;
 
       // -- helpers ----------------------------------------------------------
-      const renderRichText = (text, fontSize, textWidth) => {
+      const renderRichText = (text, fontSize, textWidth, spacing = {}) => {
         const parts = text.split(/(\*\*.*?\*\*)/g).filter(Boolean);
         parts.forEach((p, idx) => {
           const bold = p.startsWith('**') && p.endsWith('**');
           doc.font(bold ? 'Times-Bold' : 'Times-Roman').fontSize(fontSize).fillColor(BLACK)
              .text(bold ? p.slice(2, -2) : p, {
-               width: textWidth, continued: idx < parts.length - 1, lineGap: SP.lineGap
+               width: textWidth, continued: idx < parts.length - 1, lineGap: SP.lineGap, ...spacing
              });
         });
       };
@@ -333,7 +448,10 @@ function renderToBuffer(content, { scale, measure = false }) {
         doc.text('•', textX - SP.labelSep - doc.widthOfString('•'), startY, { lineBreak: false });
         doc.x = textX;
         doc.y = startY;
-        renderRichText(highlightSkills(text, jdSkills), FS.body, right - textX);
+        const marked = highlightSkills(text, jdSkills);
+        // Slightly-too-long bullet: tighten spacing a little so it stays on one line.
+        const spacing = tightSpacing(marked, FS.body, right - textX) || {};
+        renderRichText(marked, FS.body, right - textX, spacing);
         doc.y = Math.max(doc.y, startY + doc.currentLineHeight()) + SP.itemSep;
       };
 
@@ -458,7 +576,7 @@ export async function generateResumePDFWithMeta(masterResume = {}, tailoredData 
   const content = prepareResumeContent(masterResume, tailoredData);
   const plans = buildFitPlans(content);
   const render = async (k) => {
-    const view = applyPlan(content, plans[k]);
+    const view = fitBulletsToLines(applyPlan(content, plans[k]), plans[k].scale, content.jdSkills);
     const out = await renderToBuffer(view, plans[k]);
     return { ...out, view, plan: plans[k], k };
   };
@@ -496,7 +614,12 @@ export async function generateResumePDFWithMeta(masterResume = {}, tailoredData 
     extrasLeftOut: before.extras - after.extras,
     educationLeftOut: before.education - after.education
   };
-  content.changes = { ...content.changes, condensed };
+  // Bullets whose wording was shortened (same meaning) to save a line.
+  const fullBullets = [...full.experiences.flatMap((e) => e.highlights), ...full.projects.flatMap((pr) => pr.highlights), ...full.extras];
+  const shortened = [...best.view.experiences.flatMap((e) => e.highlights), ...best.view.projects.flatMap((pr) => pr.highlights), ...best.view.extras]
+    .filter((t) => !fullBullets.includes(t)).length;
+  const lines = { ...bulletLineStats(best.view, best.plan.scale, content.jdSkills), shortened };
+  content.changes = { ...content.changes, condensed, lines };
 
   return {
     buffer: best.buffer,
