@@ -2,10 +2,12 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
-import { getMasterResume, saveMasterResume, getEmailTemplate, getJobTargetById, getDiscoveredJobs, updateJobTarget } from '../services/storageService.js';
+import { getMasterResume, saveMasterResume, masterResumeVersion, getEmailTemplate, getJobTargetById, getDiscoveredJobs, updateJobTarget } from '../services/storageService.js';
+import { extractPdfLines } from '../services/pdfTextService.js';
+import { parseResumeLines } from '../shared/resumeParser.js';
 import { generateTailoredResume } from '../services/resumeTailorService.js';
 import { generateResumePDF } from '../services/pdfService.js';
-import { requireAuth, optionalAuth } from '../middleware/authMiddleware.js';
+import { requireAuth } from '../middleware/authMiddleware.js';
 import { SKILLS } from '../shared/keywords.js';
 import User from '../models/User.js';
 import { resolveRole, resolveCompany } from '../shared/jobMeta.js';
@@ -46,6 +48,64 @@ const upload = multer({
   }
 });
 
+// In-memory upload for parsing only (the file is not stored).
+const parseUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf');
+    cb(ok ? null : new Error('Only PDF files are allowed.'), ok);
+  }
+});
+
+// The PDF this user uploaded earlier (their own folder; the legacy global file only for the owner).
+function uploadedPdfPath(req) {
+  const userPdf = req.userId ? path.join(UPLOADS_DIR, req.userId.toString(), 'my_resume.pdf') : null;
+  if (userPdf && fs.existsSync(userPdf)) return userPdf;
+  const globalPdf = path.join(UPLOADS_DIR, 'my_resume.pdf');
+  return isPrimaryUser(req.user?.email) && fs.existsSync(globalPdf) ? globalPdf : null;
+}
+
+/**
+ * POST /api/resume/parse-pdf  (multipart field "resumePdf", optional)
+ * Extracts experience, skills, education, projects... from a PDF into a DRAFT.
+ * Nothing is saved: the user reviews the draft and saves it with POST /api/resume.
+ * Without a file, the user's previously uploaded PDF is used.
+ */
+router.post('/parse-pdf', requireAuth, (req, res, next) => {
+  parseUpload.single('resumePdf')(req, res, (err) => {
+    if (err) return res.status(400).json({ success: false, error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  try {
+    let buffer = req.file?.buffer;
+    if (!buffer) {
+      const file = uploadedPdfPath(req);
+      if (!file) return res.status(404).json({ success: false, error: 'No PDF uploaded yet. Choose a PDF to extract from.' });
+      buffer = fs.readFileSync(file);
+    }
+    const { lines, pages } = await extractPdfLines(buffer);
+    if (lines.length < 5) {
+      return res.status(422).json({ success: false, error: 'This PDF has almost no selectable text (it may be a scanned image). Upload a text-based PDF.' });
+    }
+    const result = parseResumeLines(lines);
+    res.json({ success: true, data: { ...result, pages } });
+  } catch (err) {
+    res.status(422).json({ success: false, error: `Could not read this PDF: ${err.message}` });
+  }
+});
+
+/** GET /api/resume/version — fingerprint of the saved resume (the extension uses it to drop stale cache). */
+router.get('/version', requireAuth, async (req, res) => {
+  try {
+    const master = await getMasterResume(req.userId);
+    res.json({ success: true, data: { version: masterResumeVersion(master), updatedAt: master?.updatedAt || null } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET Master Resume Data (tenant-scoped)
 router.get('/', requireAuth, async (req, res) => {
   try {
@@ -62,7 +122,7 @@ router.post('/', requireAuth, async (req, res) => {
     const updated = await saveMasterResume(req.body, req.userId || null);
     // Scores depend on the resume, so refresh them in the background.
     rescoreUserTargets(req.userId).catch((e) => console.warn('[ATS] rescore after save failed:', e.message));
-    res.json({ success: true, message: 'Master resume profile updated', data: updated });
+    res.json({ success: true, message: 'Master resume saved', data: updated, version: masterResumeVersion(updated) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -297,7 +357,7 @@ router.post('/tailor', requireAuth, async (req, res) => {
 
     res.json({
       success: true,
-      data: { report, changes, targetRole, companyName, filename, pdfBase64: pdf.toString('base64') }
+      data: { report, changes, targetRole, companyName, filename, resumeVersion: masterResumeVersion(master), pdfBase64: pdf.toString('base64') }
     });
   } catch (err) {
     res.status(isProfileError(err) ? 400 : 500).json({ success: false, error: err.message });

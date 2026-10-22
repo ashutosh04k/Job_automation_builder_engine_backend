@@ -51,16 +51,70 @@ const VERTICAL_SP_KEYS = [
 
 const PAGE_MARGIN = { top: 14.4, bottom: 7.2, left: 14.4, right: 14.4 }; // 0.2in / 0.1in
 
-// Fit attempts, tried in order. Trim weak bullets before shrinking text.
 const MIN_SCALE = MIN_BODY_PT / FS_BASE.body;
-const FIT_ATTEMPTS = [
-  { scale: 1, expBullets: Infinity, projBullets: Infinity },
-  { scale: 1, expBullets: 6, projBullets: 3 },
-  { scale: 1, expBullets: 5, projBullets: 3 },
-  { scale: 0.98, expBullets: 5, projBullets: 2 },
-  { scale: MIN_SCALE, expBullets: 4, projBullets: 2 },
-  { scale: MIN_SCALE, expBullets: 3, projBullets: 2 }
-];
+
+/**
+ * Fit plans, from "everything" to "most condensed". Each plan only removes
+ * content (or shrinks text slightly), so page count never goes up along the
+ * list and we can binary-search for the fullest plan that fits one page.
+ *
+ * Order of what goes first (least valuable first):
+ *   long lists -> extra certificates/achievements -> older education ->
+ *   older roles' bullets -> least relevant projects' bullets -> those projects ->
+ *   latest role's weakest bullets -> older roles become title + dates only.
+ * Bullets/projects are already ranked by JD relevance, so cutting from the end
+ * drops the least relevant ones. Roles are never removed (no unexplained gaps).
+ */
+function buildFitPlans(content) {
+  const nExp = content.experiences.map((e) => e.highlights.length);
+  const nProj = content.projects.map((p) => p.highlights.length);
+  const plans = [];
+  let p = {
+    scale: 1, expCaps: [...nExp], projCaps: [...nProj],
+    skillItemsMax: Infinity, eduMax: Infinity, extrasMax: Infinity
+  };
+  const push = (changes) => {
+    const next = { ...p, ...changes };
+    if (JSON.stringify(next) !== JSON.stringify(p)) plans.push(next);
+    p = next;
+  };
+  const cap = (arr, c) => arr.map((n) => (n < 0 ? n : Math.min(n, c)));
+  const setAt = (arr, i, v) => arr.map((n, k) => (k === i ? v : n));
+
+  plans.push(p);
+  push({ expCaps: cap(p.expCaps, 6), projCaps: cap(p.projCaps, 3), extrasMax: 6 });
+  push({ expCaps: cap(p.expCaps, 5), extrasMax: 4 });
+  push({ scale: 0.98, projCaps: cap(p.projCaps, 2), extrasMax: 3 });
+  push({ scale: MIN_SCALE, eduMax: 2, skillItemsMax: 12, extrasMax: 2 });
+  push({ extrasMax: 0 });
+  for (const c of [3, 2]) {
+    for (let i = nExp.length - 1; i >= 1; i--) if (p.expCaps[i] > c) push({ expCaps: setAt(p.expCaps, i, c) });
+  }
+  for (let i = nProj.length - 1; i >= 0; i--) if (p.projCaps[i] > 1) push({ projCaps: setAt(p.projCaps, i, 1) });
+  push({ eduMax: 1, skillItemsMax: 8 });
+  for (let i = nProj.length - 1; i >= 1; i--) push({ projCaps: setAt(p.projCaps, i, -1) });
+  for (const c of [4, 3]) if (p.expCaps[0] > c) push({ expCaps: setAt(p.expCaps, 0, c) });
+  for (const c of [1, 0]) {
+    for (let i = nExp.length - 1; i >= 1; i--) if (p.expCaps[i] > c) push({ expCaps: setAt(p.expCaps, i, c) });
+  }
+  if (nProj.length) push({ projCaps: setAt(p.projCaps, 0, -1) });
+  for (const c of [2, 1]) if (p.expCaps[0] > c) push({ expCaps: setAt(p.expCaps, 0, c) });
+  return plans;
+}
+
+/** The content a plan keeps (projCaps -1 = project left out). */
+function applyPlan(content, plan) {
+  return {
+    ...content,
+    experiences: content.experiences.map((e, i) => ({ ...e, highlights: e.highlights.slice(0, plan.expCaps[i]) })),
+    projects: content.projects
+      .map((pr, i) => ({ ...pr, highlights: pr.highlights.slice(0, Math.max(0, plan.projCaps[i])), keep: plan.projCaps[i] >= 0 }))
+      .filter((pr) => pr.keep),
+    skillGroups: content.skillGroups.map((g) => ({ ...g, items: g.items.slice(0, plan.skillItemsMax) })),
+    education: content.education.slice(0, plan.eduMax),
+    extras: content.extras.slice(0, plan.extrasMax)
+  };
+}
 
 const BLACK = '#000000';
 const LINK = '#0000ff';
@@ -112,6 +166,8 @@ export function prepareResumeContent(masterResume = {}, tailoredData = {}) {
   const projects = Array.isArray(m.projects) ? m.projects : [];
   const education = Array.isArray(m.education) ? m.education : [];
   const skillGroups = Array.isArray(m.skills) ? m.skills : [];
+  const certifications = Array.isArray(m.certifications) ? m.certifications : [];
+  const achievements = Array.isArray(m.achievements) ? m.achievements : [];
 
   if (!m.fullName || experiences.length === 0) {
     throw new Error('Master resume is incomplete (name and at least one experience entry are required).');
@@ -159,6 +215,8 @@ export function prepareResumeContent(masterResume = {}, tailoredData = {}) {
         highlights: rank(clean(p.highlights), (t) => t)
       })),
     education,
+    // Certifications + achievements, most JD-relevant first; dropped first when condensing.
+    extras: rank(clean([...certifications, ...achievements]), (t) => t),
     // Groups with the most JD matches first; inside a group, matched items first.
     skillGroups: rank(
       skillGroups.filter((g) => (g.items || []).length),
@@ -182,12 +240,13 @@ export function prepareResumeContent(masterResume = {}, tailoredData = {}) {
 }
 
 /** The exact text printed for a given fit attempt (what an ATS would parse). */
-export function renderedText(content, { expBullets = Infinity, projBullets = Infinity } = {}) {
+export function renderedText(content) {
   const { m } = content;
   const roles = content.experiences.map((e) => [e.role, e.company].filter(Boolean).join(' at '));
   const bullets = [
-    ...content.experiences.flatMap((e) => e.highlights.slice(0, expBullets)),
-    ...content.projects.flatMap((p) => p.highlights.slice(0, projBullets))
+    ...content.experiences.flatMap((e) => e.highlights),
+    ...content.projects.flatMap((p) => p.highlights),
+    ...(content.extras || [])
   ];
   const skills = [
     ...content.skillGroups.map((g) => `${g.category}: ${g.items.join(', ')}`),
@@ -202,11 +261,12 @@ export function renderedText(content, { expBullets = Infinity, projBullets = Inf
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
-function renderToBuffer(content, { scale, expBullets, projBullets }) {
+function renderToBuffer(content, { scale, measure = false }) {
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({
-        size: 'letter',
+        // measure: one very tall page, used only to measure how long the full content is
+        size: measure ? [612, 792 * 10] : 'letter',
         margins: PAGE_MARGIN,
         bufferPages: true,
         // Shown as the title in PDF viewers and read by some ATS parsers.
@@ -325,7 +385,7 @@ function renderToBuffer(content, { scale, expBullets, projBullets }) {
           ],
           exp.period || ''
         );
-        exp.highlights.slice(0, expBullets).forEach(renderBullet);
+        exp.highlights.forEach(renderBullet);
         doc.y += SP.entryGap;
       });
 
@@ -369,13 +429,20 @@ function renderToBuffer(content, { scale, expBullets, projBullets }) {
             p.link ? '(Link)' : '',
             p.link || ''
           );
-          p.highlights.slice(0, projBullets).forEach(renderBullet);
+          p.highlights.forEach(renderBullet);
           doc.y += SP.entryGap;
         });
       }
 
+      // -- certifications & achievements ------------------------------------
+      if (content.extras && content.extras.length) {
+        renderSection('Certifications & Achievements');
+        content.extras.forEach(renderBullet);
+      }
+
       const pages = doc.bufferedPageRange().count;
-      doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), pages }));
+      const contentHeight = doc.y + PAGE_MARGIN.bottom;
+      doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), pages, contentHeight }));
       doc.end();
     } catch (err) {
       reject(err);
@@ -389,23 +456,57 @@ function renderToBuffer(content, { scale, expBullets, projBullets }) {
  */
 export async function generateResumePDFWithMeta(masterResume = {}, tailoredData = {}) {
   const content = prepareResumeContent(masterResume, tailoredData);
-  let last = null;
-  for (const attempt of FIT_ATTEMPTS) {
-    const { buffer, pages } = await renderToBuffer(content, attempt);
-    last = {
-      buffer,
-      pages,
-      scale: attempt.scale,
-      bodyPt: +(FS_BASE.body * attempt.scale).toFixed(2),
-      trimmed: attempt.expBullets !== Infinity || attempt.projBullets !== Infinity,
-      rendered: renderedText(content, attempt),
-      content
-    };
-    if (pages === 1) return last;
+  const plans = buildFitPlans(content);
+  const render = async (k) => {
+    const view = applyPlan(content, plans[k]);
+    const out = await renderToBuffer(view, plans[k]);
+    return { ...out, view, plan: plans[k], k };
+  };
+
+  // Fullest plan that fits one page. Page count only drops along `plans`.
+  let best = await render(0);
+  if (best.pages > 1) {
+    let lo = 1;
+    let hi = plans.length - 1;
+    let fit = null;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const r = await render(mid);
+      if (r.pages === 1) { fit = r; hi = mid - 1; } else { lo = mid + 1; }
+    }
+    best = fit || (await render(plans.length - 1));
+    if (!fit) console.warn(`[pdfService] "${masterResume?.fullName}" still exceeds one page at the most condensed plan.`);
   }
-  // Content is too long even after trimming: keep text readable, allow page 2.
-  console.warn(`[pdfService] Resume for "${masterResume?.fullName}" did not fit on one page (${last.pages} pages).`);
-  return last;
+
+  const full = applyPlan(content, plans[0]);
+  const count = (v) => ({
+    bullets: v.experiences.reduce((n, e) => n + e.highlights.length, 0) + v.projects.reduce((n, pr) => n + pr.highlights.length, 0),
+    projects: v.projects.length,
+    extras: v.extras.length,
+    education: v.education.length
+  });
+  const before = count(full);
+  const after = count(best.view);
+  const condensed = {
+    // Length of the uncondensed resume in letter pages (measured, not counted).
+    fromPages: Math.max(1, Math.ceil((await renderToBuffer(full, { ...plans[0], measure: true })).contentHeight / 792)),
+    bulletsKept: after.bullets,
+    bulletsLeftOut: before.bullets - after.bullets,
+    projectsLeftOut: before.projects - after.projects,
+    extrasLeftOut: before.extras - after.extras,
+    educationLeftOut: before.education - after.education
+  };
+  content.changes = { ...content.changes, condensed };
+
+  return {
+    buffer: best.buffer,
+    pages: best.pages,
+    scale: best.plan.scale,
+    bodyPt: +(FS_BASE.body * best.plan.scale).toFixed(2),
+    trimmed: best.k > 0,
+    rendered: renderedText(best.view),
+    content
+  };
 }
 
 /** Backwards-compatible API used by routes and the email service. Returns a Buffer. */

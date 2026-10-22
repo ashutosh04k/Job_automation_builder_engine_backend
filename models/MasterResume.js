@@ -36,6 +36,8 @@ const masterResumeSchema = new mongoose.Schema(
         score: String,
       },
     ],
+    certifications: [{ type: String }],
+    achievements: [{ type: String }],
     projects: [
       {
         name: String,

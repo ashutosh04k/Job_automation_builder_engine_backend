@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import mongoose from 'mongoose';
@@ -327,27 +328,65 @@ export async function getMasterResume(userId = null) {
   return readJsonFile('master_resume', defaultMaster);
 }
 
+// Trim strings, drop empty rows/bullets, keep only known fields.
+function sanitizeMasterResume(data = {}) {
+  const str = (v) => (typeof v === 'string' ? v.trim() : '');
+  const list = (v) => (Array.isArray(v) ? v.map(str).filter(Boolean) : []);
+  const out = {};
+  ['fullName', 'email', 'phone', 'location', 'website', 'resumeUrl', 'linkedin', 'github', 'title', 'summary']
+    .forEach((k) => { if (k in data) out[k] = str(data[k]); });
+  if ('experience' in data) {
+    out.experience = (data.experience || [])
+      .map((e) => ({ company: str(e.company), role: str(e.role), period: str(e.period), location: str(e.location), highlights: list(e.highlights) }))
+      .filter((e) => e.company || e.role || e.highlights.length);
+  }
+  if ('education' in data) {
+    out.education = (data.education || [])
+      .map((e) => ({ degree: str(e.degree), institution: str(e.institution), period: str(e.period), score: str(e.score) }))
+      .filter((e) => e.degree || e.institution);
+  }
+  if ('skills' in data) {
+    out.skills = (data.skills || [])
+      .map((g) => ({ category: str(g.category) || 'Skills', items: [...new Set(list(g.items))] }))
+      .filter((g) => g.items.length);
+  }
+  if ('projects' in data) {
+    out.projects = (data.projects || [])
+      .map((pr) => ({ name: str(pr.name), link: str(pr.link), technologies: list(pr.technologies), highlights: list(pr.highlights) }))
+      .filter((pr) => pr.name || pr.highlights.length);
+  }
+  if ('certifications' in data) out.certifications = list(data.certifications);
+  if ('achievements' in data) out.achievements = list(data.achievements);
+  return out;
+}
+
+/**
+ * Save the master resume. When MongoDB is connected a failed save is an error
+ * (it used to silently write a shared JSON file and report success).
+ */
 export async function saveMasterResume(data, userId = null) {
-  // Strip immutable fields from incoming update payload
-  const { _id, userId: ignoredUserId, __v, createdAt, updatedAt, ...cleanData } = data || {};
+  const cleanData = sanitizeMasterResume(data || {});
 
   if (isMongoConnected()) {
-    try {
-      const query = userId ? { userId } : {};
-      let master = await MasterResume.findOne(query);
-      if (!master) {
-        master = new MasterResume({ ...cleanData, userId: userId || undefined });
-      } else {
-        Object.assign(master, cleanData);
-      }
-      await master.save();
-      return master.toObject();
-    } catch (err) {
-      console.warn('Mongo MasterResume save warning:', err.message);
+    const query = userId ? { userId } : {};
+    let master = await MasterResume.findOne(query);
+    if (!master) {
+      master = new MasterResume({ ...cleanData, userId: userId || undefined });
+    } else {
+      Object.assign(master, cleanData);
     }
+    await master.save();
+    return master.toObject();
   }
-  writeJsonFile('master_resume', data);
-  return data;
+  const merged = { ...readJsonFile('master_resume', {}), ...cleanData };
+  writeJsonFile('master_resume', merged);
+  return merged;
+}
+
+/** Fingerprint of the resume content; changes whenever any saved field changes. */
+export function masterResumeVersion(master = {}) {
+  const { _id, __v, userId, createdAt, updatedAt, ...content } = master || {};
+  return crypto.createHash('sha1').update(JSON.stringify(content)).digest('hex').slice(0, 16);
 }
 
 // --- SETTINGS STORAGE WITH USER-SCOPING ---
