@@ -13,6 +13,7 @@ import User from '../models/User.js';
 import { resolveRole, resolveCompany } from '../shared/jobMeta.js';
 import { isPrimaryUser } from '../shared/owner.js';
 import { tailorAndScore, rescoreUserTargets } from '../services/atsService.js';
+import { applyAdditions, additionTargets } from '../shared/resumeAdditions.js';
 
 const router = express.Router();
 
@@ -357,10 +358,35 @@ router.post('/tailor', requireAuth, async (req, res) => {
 
     res.json({
       success: true,
-      data: { report, changes, targetRole, companyName, filename, resumeVersion: masterResumeVersion(master), pdfBase64: pdf.toString('base64') }
+      data: {
+        report, changes, targetRole, companyName, filename,
+        resumeVersion: masterResumeVersion(master),
+        addTargets: additionTargets(master), // roles/projects offered by "Add missing"
+        pdfBase64: pdf.toString('base64')
+      }
     });
   } catch (err) {
     res.status(isProfileError(err) ? 400 : 500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/resume/add-missing
+ * Body: { additions: [{ term, mode: 'skill' | 'bullet', bullet?, target?: 'exp:0' | 'proj:1' }] }
+ * Adds JD terms the user confirms they have, visibly, to the master resume
+ * (Skills list or a one-line bullet in their own words). All-or-nothing.
+ */
+router.post('/add-missing', requireAuth, async (req, res) => {
+  try {
+    const master = await getMasterResume(req.userId);
+    if (!master?.fullName) return res.status(400).json({ success: false, error: 'Set up your master resume first.' });
+    const { update, added, errors } = applyAdditions(master, req.body?.additions);
+    if (errors.length) return res.status(400).json({ success: false, error: errors.join(' '), errors });
+    const saved = await saveMasterResume(update, req.userId || null);
+    rescoreUserTargets(req.userId).catch((e) => console.warn('[ATS] rescore after add-missing failed:', e.message));
+    res.json({ success: true, data: { added, version: masterResumeVersion(saved) } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

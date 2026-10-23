@@ -95,3 +95,25 @@ export function matchJdTerms(jd = '', resumeText = '') {
     acronyms: unknownAcronyms(jdText).map((t) => ({ label: t, matched: hasTerm(res, t.toLowerCase()) }))
   };
 }
+
+/**
+ * Does `text` show this term the way the scorer looks for it?
+ * Works for tool names (GraphQL), JD terms ("Code reviews"), soft skills and acronyms.
+ */
+export function termShownIn(label = '', text = '') {
+  const skill = SKILLS.find((s) => s.label.toLowerCase() === String(label).toLowerCase());
+  if (skill) return skill.aliases.some((a) => hasTerm(text, a));
+  const item = [...CONCEPTS, ...SOFT_SKILLS].find((c) => c.label.toLowerCase() === String(label).toLowerCase());
+  if (item) return item.resume.some((a) => has(text, a));
+  return hasTerm(text, String(label).toLowerCase());
+}
+
+/** Practices / domain terms this JD asks for (for ranking bullets by relevance). */
+export function jdConcepts(jd = '') {
+  return CONCEPTS.filter((c) => c.jd.some((a) => hasTerm(jd, a)));
+}
+
+/** How many of those terms a bullet shows. */
+export function conceptHits(text = '', concepts = []) {
+  return concepts.filter((c) => c.resume.some((a) => has(text, a))).length;
+}

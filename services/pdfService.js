@@ -2,6 +2,7 @@ import PDFDocument from 'pdfkit';
 import {
   extractSkills, countMatches, findSkill, detectRoleFocus, highlightSkills, surfaceForm, hasSkill, findSkillSpans
 } from '../shared/keywords.js';
+import { jdConcepts, conceptHits } from '../shared/jdTerms.js';
 
 /**
  * PDF resume generator (PDFKit).
@@ -289,12 +290,28 @@ export function prepareResumeContent(masterResume = {}, tailoredData = {}) {
     throw new Error('Master resume is incomplete (name and at least one experience entry are required).');
   }
 
-  // Stable sort: ties keep the order the user wrote, so trimming drops the last ones.
+  // Relevance of a bullet/project to this JD. Each JD term it shows (tool, or practice/domain
+  // term like "code reviews") adds 1 / (how many bullets show that term), so a bullet that is
+  // the ONLY proof of a JD term outranks the tenth bullet about React. Bullets with a number
+  // (a measurable result) get a small bonus. Stable sort: ties keep the user's order.
+  const concepts = jdConcepts(jd);
+  const terms = [
+    ...jdSkills.map((sk) => (t) => countMatches(t, [sk]) > 0),
+    ...concepts.map((c) => (t) => conceptHits(t, [c]) > 0)
+  ];
+  const allBullets = [
+    ...experiences.flatMap((e) => e.highlights || []),
+    ...projects.flatMap((p) => p.highlights || []),
+    ...certifications, ...achievements
+  ].map((t) => String(t));
+  const termCount = terms.map((has) => Math.max(1, allBullets.filter(has).length));
+  const relevance = (text) => terms.reduce((n, has, k) => n + (has(text) ? 1 / termCount[k] : 0), 0)
+    + (/\d/.test(text.replace(/\b(19|20)\d{2}\b/g, '')) ? 0.3 : 0);
   const rank = (items, toText) =>
-    jdSkills.length === 0
+    terms.length === 0
       ? [...items]
       : items
-          .map((item, i) => ({ item, i, score: countMatches(toText(item), jdSkills) }))
+          .map((item, i) => ({ item, i, score: relevance(toText(item)) }))
           .sort((a, b) => b.score - a.score || a.i - b.i)
           .map((x) => x.item);
 
