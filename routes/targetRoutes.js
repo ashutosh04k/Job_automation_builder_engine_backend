@@ -6,7 +6,7 @@ import {
   deleteJobTarget, 
   getJobTargetById 
 } from '../services/storageService.js';
-import { processTargetExecution, executeDaily9AMCronJob } from '../services/cronService.js';
+import { processTargetExecution, executeDaily9AMCronJob, getCronStatus } from '../services/cronService.js';
 import { requireAuth } from '../middleware/authMiddleware.js';
 import { cleanCompanyName, resolveRole } from '../shared/jobMeta.js';
 import { getMasterResume } from '../services/storageService.js';
@@ -145,12 +145,23 @@ router.post('/rescore', async (req, res) => {
   }
 });
 
-// POST trigger daily 9 AM batch cron manually
+// POST run the daily batch now. Returns at once with what will be sent and why
+// the rest is skipped; emails go out in the background (results in Logs).
 router.post('/trigger-all-cron', async (req, res) => {
   try {
     const isAdmin = req.user?.role === 'admin';
-    const summary = await executeDaily9AMCronJob('manual', { onlyUserId: isAdmin ? null : req.userId });
-    res.json({ success: true, message: 'Daily 9 AM cron job triggered manually.', summary });
+    const summary = await executeDaily9AMCronJob('manual', { onlyUserId: isAdmin ? null : req.userId, background: true });
+    res.json({ success: true, message: summary.message, summary });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET scheduler status: schedule, last run since server start, and what is due now
+router.get('/cron-status', async (req, res) => {
+  try {
+    const isAdmin = req.user?.role === 'admin';
+    res.json({ success: true, data: await getCronStatus({ onlyUserId: isAdmin ? null : req.userId }) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

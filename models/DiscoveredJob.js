@@ -50,9 +50,17 @@ const discoveredJobSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    // null = not scored (no real job description yet). Never a made-up number.
     atsScore: {
       type: Number,
-      default: 85,
+      default: null,
+    },
+    missingSkills: [{ type: String }],
+    // When LinkedIn says it was posted ("3 days ago" at scan time)
+    postedAt: {
+      type: Date,
+      default: null,
+      index: true,
     },
     status: {
       type: String,

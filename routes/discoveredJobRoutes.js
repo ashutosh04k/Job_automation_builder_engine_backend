@@ -10,6 +10,19 @@ import { requireAuth } from '../middleware/authMiddleware.js';
 import { cleanCompanyName } from '../shared/jobMeta.js';
 import { getMasterResume } from '../services/storageService.js';
 import { safeScore } from '../services/atsService.js';
+import { buildSearchPlan, sanitizeScannedJob, MIN_JD_FOR_SCORE, DEFAULT_DAYS } from '../shared/linkedinJobs.js';
+
+const MAX_BATCH = 60;
+
+/** Score a job against the master resume, only when it has a real description. */
+async function scoreJob(master, job) {
+  if ((job.jobDescription || '').length < MIN_JD_FOR_SCORE) return { atsScore: null, missingSkills: [] };
+  const report = await safeScore(master, { jobDescription: job.jobDescription, targetRole: job.title });
+  return {
+    atsScore: report?.score ?? null,
+    missingSkills: (report?.keywords?.required?.missing || []).slice(0, 8)
+  };
+}
 
 const router = express.Router();
 
@@ -27,9 +40,11 @@ router.get('/', async (req, res) => {
     const applyType = req.query.applyType || 'all';
     const status = req.query.status || 'all';
     const fetchAll = req.query.all === 'true';
+    const sort = req.query.sort === 'score' ? 'score' : 'recent';
+    const maxDays = Number(req.query.maxDays) || 0;
 
     const userId = req.userId || null;
-    const result = await getDiscoveredJobs({ page, limit, search, applyType, status, fetchAll }, userId);
+    const result = await getDiscoveredJobs({ page, limit, search, applyType, status, fetchAll, sort, maxDays }, userId);
 
     if (fetchAll) {
       return res.json({
@@ -57,39 +72,82 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * GET /api/discovered-jobs/search-plan?days=3
+ * LinkedIn searches that fit the master resume (role + most-used skills), last N days.
+ */
+router.get('/search-plan', async (req, res) => {
+  try {
+    const days = Math.min(30, Math.max(1, Number(req.query.days) || DEFAULT_DAYS));
+    const master = await getMasterResume(req.userId || null);
+    return res.json({ success: true, data: buildSearchPlan(master || {}, { days }) });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * POST /api/discovered-jobs/batch
- * Bulk ingestion of jobs scraped from LinkedIn search results via the Chrome extension
+ * Jobs the extension read from the user's LinkedIn search (with full descriptions).
+ * Each is scored against the master resume; jobs without a real description stay unscored.
  */
 router.post('/batch', async (req, res) => {
   try {
-    const { jobs } = req.body;
+    const { jobs } = req.body || {};
     if (!Array.isArray(jobs) || jobs.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid or empty jobs array provided.'
-      });
+      return res.status(400).json({ success: false, error: 'Invalid or empty jobs array provided.' });
+    }
+    const clean = jobs.slice(0, MAX_BATCH).map((j) => sanitizeScannedJob(j)).filter(Boolean);
+    if (!clean.length) {
+      return res.status(400).json({ success: false, error: 'None of these looked like LinkedIn jobs (missing job ID or title).' });
     }
 
     const userId = req.userId || null;
-    // Score only jobs that came with a real description (search-result cards usually don't).
     const master = await getMasterResume(userId);
     const scored = [];
-    for (const job of jobs.slice(0, 100)) {
-      const jd = job.jobDescription || '';
-      const report = jd.trim()
-        ? await safeScore(master, { jobDescription: jd, targetRole: job.title || job.jobTitle || '' })
-        : null;
-      scored.push({ ...job, atsScore: report?.score ?? null });
-    }
+    for (const job of clean) scored.push({ ...job, ...(await scoreJob(master, job)) });
     const result = await saveDiscoveredJobsBatch(scored, userId);
+
+    const top = scored
+      .filter((j) => typeof j.atsScore === 'number')
+      .sort((a, b) => b.atsScore - a.atsScore)
+      .slice(0, 5)
+      .map((j) => ({ jobId: j.jobId, title: j.title, company: j.company, atsScore: j.atsScore }));
+    const unscored = scored.filter((j) => j.atsScore === null).length;
 
     return res.json({
       success: true,
-      message: `Successfully processed ${result.totalCount} jobs (${result.easyApplyCount} Easy Apply, ${result.externalCount} External Apply).`,
-      ...result
+      message: `Saved ${result.totalCount} job(s): ${result.insertedCount} new, ${result.updatedCount} updated.${unscored ? ` ${unscored} had no full description and are not scored.` : ''}`,
+      ...result,
+      skipped: jobs.length - clean.length,
+      unscored,
+      top
     });
   } catch (err) {
     console.error('[Discovered Jobs Batch Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/discovered-jobs/rescore
+ * Re-score every saved job against the current master resume. Jobs without a
+ * real description get no score (this also clears the old placeholder 85s).
+ */
+router.post('/rescore', async (req, res) => {
+  try {
+    const userId = req.userId || null;
+    const master = await getMasterResume(userId);
+    const { data } = await getDiscoveredJobs({ fetchAll: true }, userId);
+    let scored = 0;
+    for (const job of data) {
+      const s = await scoreJob(master, job);
+      if (s.atsScore !== null) scored += 1;
+      if (s.atsScore !== job.atsScore || String(s.missingSkills) !== String(job.missingSkills || [])) {
+        await updateDiscoveredJob(job._id, s, userId);
+      }
+    }
+    return res.json({ success: true, message: `Rescored ${data.length} job(s); ${scored} have a full description and a score.`, total: data.length, scored });
+  } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
 });

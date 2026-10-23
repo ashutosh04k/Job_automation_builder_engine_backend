@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import path from 'path';
 import fs from 'fs';
 import targetRoutes from './routes/targetRoutes.js';
+import cronRoutes from './routes/cronRoutes.js';
 import resumeRoutes from './routes/resumeRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
 import authRoutes from './routes/authRoutes.js';
@@ -41,6 +42,7 @@ app.get('/api/health', (req, res) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/targets', targetRoutes);
+app.use('/api/cron', cronRoutes);
 app.use('/api/resume', resumeRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/template', templateRoutes);

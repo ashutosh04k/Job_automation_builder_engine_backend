@@ -657,6 +657,13 @@ export async function getDiscoveredJobs(options = {}, userId = null) {
   const status = (options.status || 'all').trim().toLowerCase();
   const fetchAll = options.fetchAll === true;
 
+  // sort: 'recent' (default) or 'score' (best ATS match first, unscored last)
+  const sortBy = options.sort === 'score' ? 'score' : 'recent';
+  // maxDays: only jobs LinkedIn says were posted in the last N days
+  const maxDays = Number(options.maxDays) > 0 ? Number(options.maxDays) : 0;
+  const postedSince = maxDays ? new Date(Date.now() - maxDays * 864e5) : null;
+  const mongoSort = sortBy === 'score' ? { atsScore: -1, postedAt: -1, createdAt: -1 } : { postedAt: -1, createdAt: -1 };
+
   if (isMongoConnected()) {
     try {
       const baseQuery = {};
@@ -675,6 +682,9 @@ export async function getDiscoveredJobs(options = {}, userId = null) {
       if (status && status !== 'all') {
         filterQuery.status = status;
       }
+      if (postedSince) {
+        filterQuery.postedAt = { $gte: postedSince };
+      }
       if (search) {
         filterQuery.$or = [
           { title: { $regex: search, $options: 'i' } },
@@ -685,7 +695,7 @@ export async function getDiscoveredJobs(options = {}, userId = null) {
       }
 
       if (fetchAll) {
-        const allDocs = await DiscoveredJob.find(filterQuery).sort({ createdAt: -1 });
+        const allDocs = await DiscoveredJob.find(filterQuery).sort(mongoSort);
         return {
           data: allDocs.map(d => (d.toObject ? d.toObject() : d)),
           counts: { all: allCount, easyApply: easyCount, external: externalCount }
@@ -698,7 +708,7 @@ export async function getDiscoveredJobs(options = {}, userId = null) {
       const skip = (currentPage - 1) * limit;
 
       const docs = await DiscoveredJob.find(filterQuery)
-        .sort({ createdAt: -1 })
+        .sort(mongoSort)
         .skip(skip)
         .limit(limit);
 
@@ -734,6 +744,9 @@ export async function getDiscoveredJobs(options = {}, userId = null) {
   if (status && status !== 'all') {
     filtered = filtered.filter(j => j.status === status);
   }
+  if (postedSince) {
+    filtered = filtered.filter(j => j.postedAt && new Date(j.postedAt) >= postedSince);
+  }
   if (search) {
     filtered = filtered.filter(j =>
       (j.title || '').toLowerCase().includes(search) ||
@@ -743,7 +756,9 @@ export async function getDiscoveredJobs(options = {}, userId = null) {
     );
   }
 
-  filtered.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  const time = (j) => new Date(j.postedAt || j.createdAt || 0).getTime();
+  const score = (j) => (typeof j.atsScore === 'number' ? j.atsScore : -1);
+  filtered.sort((a, b) => (sortBy === 'score' ? score(b) - score(a) : 0) || time(b) - time(a));
 
   if (fetchAll) {
     return { data: filtered, counts: { all: allCount, easyApply: easyCount, external: externalCount } };
@@ -789,9 +804,10 @@ export async function saveDiscoveredJobsBatch(jobs = [], userId = null) {
       applyType: isEasy ? 'easy_apply' : 'external',
       isEasyApply: isEasy,
       postedTime: raw.postedTime || '',
+      postedAt: raw.postedAt ? new Date(raw.postedAt) : null,
       jobDescription: jd,
       atsScore,
-      status: raw.status || 'new',
+      missingSkills: Array.isArray(raw.missingSkills) ? raw.missingSkills.slice(0, 8) : [],
       updatedAt: new Date()
     };
   });
@@ -805,9 +821,10 @@ export async function saveDiscoveredJobsBatch(jobs = [], userId = null) {
         const filter = { jobId: item.jobId };
         if (userId) filter.userId = userId;
 
+        // Re-syncing a job refreshes its details but keeps its status (applied/queued...).
         const res = await DiscoveredJob.updateOne(
           filter,
-          { $set: item, $setOnInsert: { createdAt: new Date() } },
+          { $set: item, $setOnInsert: { status: 'new' } },
           { upsert: true }
         );
 
@@ -828,6 +845,7 @@ export async function saveDiscoveredJobsBatch(jobs = [], userId = null) {
     } else {
       local.unshift({
         _id: 'dj_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+        status: 'new',
         createdAt: new Date().toISOString(),
         ...item
       });
