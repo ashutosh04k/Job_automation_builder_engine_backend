@@ -48,7 +48,7 @@ test('score moves with the resume, not just the JD', () => {
   const s2 = scoreResume({ jobDescription: jdText, targetRole: 'Frontend Developer', resume: weak, profile, pdf });
   assert.ok(s1.score > s2.score, `${s1.score} should beat ${s2.score}`);
   assert.deepEqual(s2.keywords.required.missing.sort(), ['GraphQL', 'Kafka', 'React.js', 'Redux', 'TypeScript']);
-  assert.equal(s1.breakdown.find((b) => b.key === 'keywords').score, 100);
+  assert.equal(s1.breakdown.find((b) => b.key === 'hardSkills').score, 100);
 });
 
 test('end to end: tailored PDF mirrors JD spelling and is scored on printed text', async () => {
