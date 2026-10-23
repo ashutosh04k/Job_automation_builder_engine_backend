@@ -52,6 +52,10 @@ const VERTICAL_SP_KEYS = [
 const PAGE_MARGIN = { top: 14.4, bottom: 7.2, left: 14.4, right: 14.4 }; // 0.2in / 0.1in
 
 const MIN_SCALE = MIN_BODY_PT / FS_BASE.body;
+const PAGE_HEIGHT = 792;      // US letter, pt
+const FILL_MIN_GAP = 6;       // pt of empty space worth filling
+const MAX_STRETCH = 6;        // pt added per section/entry gap (about 2pt per bullet) at most
+const MAX_REFILL_STEPS = 60;
 
 /**
  * Fit plans, from "everything" to "most condensed". Each plan only removes
@@ -133,9 +137,9 @@ const LETTER_WIDTH = 612;
 /** Width available to bullet text (letter page, margins, section + bullet indent). */
 export const BULLET_TEXT_WIDTH = LETTER_WIDTH - PAGE_MARGIN.left - PAGE_MARGIN.right
   - SP_BASE.sectionIndent - SP_BASE.bulletIndent;
-const TIGHTEN_MAX = 0.035;     // absorb up to 3.5% overflow with spacing
-const WORD_SPACING_MIN = -0.8; // pt removed per space, at most
-const CHAR_SPACING_MIN = -0.1; // pt removed per letter, at most
+const TIGHTEN_MAX = 0.03;       // absorb up to 3% overflow by tightening letter spacing
+const CHAR_SPACING_MIN = -0.18; // pt removed per letter, at most
+// (Word spacing is not used: PDFKit drops the spaces around **bold** segments when it is set.)
 
 const WORDING_RULES = [
   [/\bin order to\b/gi, 'to'],
@@ -182,13 +186,10 @@ function tightSpacing(marked, fontSize, avail) {
   if (w <= avail) return {};
   if (w > avail * (1 + TIGHTEN_MAX)) return null;
   const plain = marked.replace(/\*\*/g, '');
-  const gaps = (plain.match(/ /g) || []).length;
-  let over = w - avail + 0.5; // small safety margin
-  const wordSpacing = gaps ? Math.max(WORD_SPACING_MIN, -over / gaps) : 0;
-  over += wordSpacing * gaps;
-  const characterSpacing = over > 0 ? -over / Math.max(1, plain.length - 1) : 0;
+  const over = w - avail + 0.5; // small safety margin
+  const characterSpacing = -over / Math.max(1, plain.length - 1);
   if (characterSpacing < CHAR_SPACING_MIN) return null;
-  return { wordSpacing, characterSpacing };
+  return { characterSpacing };
 }
 
 const lineCount = (marked, fontSize, avail) =>
@@ -376,7 +377,7 @@ export function renderedText(content) {
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
-function renderToBuffer(content, { scale, measure = false }) {
+function renderToBuffer(content, { scale, measure = false, stretch = 0 }) {
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({
@@ -394,6 +395,12 @@ function renderToBuffer(content, { scale, measure = false }) {
       const FS = Object.fromEntries(Object.entries(FS_BASE).map(([k, v]) => [k, v * scale]));
       const SP = { ...SP_BASE };
       VERTICAL_SP_KEYS.forEach((k) => { SP[k] = SP_BASE[k] * scale; });
+
+      // stretch: extra vertical space (pt) used to fill the page when content runs out.
+      SP.sectionSkip += stretch;
+      SP.entryGap += stretch;
+      SP.itemSep += stretch * 0.35;
+      SP.rowSep += stretch * 0.35;
 
       const left = PAGE_MARGIN.left;
       const width = doc.page.width - PAGE_MARGIN.left - PAGE_MARGIN.right;
@@ -575,26 +582,47 @@ function renderToBuffer(content, { scale, measure = false }) {
 export async function generateResumePDFWithMeta(masterResume = {}, tailoredData = {}) {
   const content = prepareResumeContent(masterResume, tailoredData);
   const plans = buildFitPlans(content);
-  const render = async (k) => {
-    const view = fitBulletsToLines(applyPlan(content, plans[k]), plans[k].scale, content.jdSkills);
-    const out = await renderToBuffer(view, plans[k]);
-    return { ...out, view, plan: plans[k], k };
-  };
+  const viewOf = (plan) => fitBulletsToLines(applyPlan(content, plan), plan.scale, content.jdSkills);
+  // Exact content height on a tall page (no page breaks), so "fits" is reliable.
+  const heightOf = async (plan, stretch = 0) =>
+    (await renderToBuffer(viewOf(plan), { ...plan, measure: true, stretch })).contentHeight;
+  const fits = async (plan) => (await heightOf(plan)) <= PAGE_HEIGHT;
 
-  // Fullest plan that fits one page. Page count only drops along `plans`.
-  let best = await render(0);
-  if (best.pages > 1) {
+  // 1. Fullest plan that fits one page. Height only drops along `plans`.
+  let k = 0;
+  if (!(await fits(plans[0]))) {
     let lo = 1;
     let hi = plans.length - 1;
-    let fit = null;
+    k = plans.length - 1;
     while (lo <= hi) {
       const mid = (lo + hi) >> 1;
-      const r = await render(mid);
-      if (r.pages === 1) { fit = r; hi = mid - 1; } else { lo = mid + 1; }
+      if (await fits(plans[mid])) { k = mid; hi = mid - 1; } else { lo = mid + 1; }
     }
-    best = fit || (await render(plans.length - 1));
-    if (!fit) console.warn(`[pdfService] "${masterResume?.fullName}" still exceeds one page at the most condensed plan.`);
   }
+  let plan = plans[k];
+
+  // 2. Plans are coarse steps, so the chosen one can leave room. Add content
+  //    back one item at a time (most relevant first) while it still fits.
+  if (k > 0) plan = await refill(plan, content, fits);
+
+  // 3. Still space at the bottom (nothing left to add)? Spread the content
+  //    down the page with slightly larger gaps, up to a limit that still looks natural.
+  const h0 = await heightOf(plan);
+  let stretch = 0;
+  if (PAGE_HEIGHT - h0 > FILL_MIN_GAP) {
+    const perPt = (await heightOf(plan, 1)) - h0; // height gained per 1pt of stretch
+    if (perPt > 0) {
+      stretch = Math.min(MAX_STRETCH, ((PAGE_HEIGHT - h0) / perPt) * 0.98);
+      while (stretch > 0 && (await heightOf(plan, stretch)) > PAGE_HEIGHT) stretch = Math.max(0, stretch - 0.5);
+    }
+  }
+
+  // Final letter-size render (safety net: drop the stretch if it ever spills).
+  const view = viewOf(plan);
+  let out = await renderToBuffer(view, { ...plan, stretch });
+  if (out.pages > 1 && stretch) { stretch = 0; out = await renderToBuffer(view, plan); }
+  if (out.pages > 1) console.warn(`[pdfService] "${masterResume?.fullName}" still exceeds one page at the most condensed plan.`);
+  const usedHeight = await heightOf(plan, stretch);
 
   const full = applyPlan(content, plans[0]);
   const count = (v) => ({
@@ -604,10 +632,10 @@ export async function generateResumePDFWithMeta(masterResume = {}, tailoredData 
     education: v.education.length
   });
   const before = count(full);
-  const after = count(best.view);
+  const after = count(view);
   const condensed = {
     // Length of the uncondensed resume in letter pages (measured, not counted).
-    fromPages: Math.max(1, Math.ceil((await renderToBuffer(full, { ...plans[0], measure: true })).contentHeight / 792)),
+    fromPages: Math.max(1, Math.ceil((await renderToBuffer(full, { ...plans[0], measure: true })).contentHeight / PAGE_HEIGHT)),
     bulletsKept: after.bullets,
     bulletsLeftOut: before.bullets - after.bullets,
     projectsLeftOut: before.projects - after.projects,
@@ -616,20 +644,63 @@ export async function generateResumePDFWithMeta(masterResume = {}, tailoredData 
   };
   // Bullets whose wording was shortened (same meaning) to save a line.
   const fullBullets = [...full.experiences.flatMap((e) => e.highlights), ...full.projects.flatMap((pr) => pr.highlights), ...full.extras];
-  const shortened = [...best.view.experiences.flatMap((e) => e.highlights), ...best.view.projects.flatMap((pr) => pr.highlights), ...best.view.extras]
+  const shortened = [...view.experiences.flatMap((e) => e.highlights), ...view.projects.flatMap((pr) => pr.highlights), ...view.extras]
     .filter((t) => !fullBullets.includes(t)).length;
-  const lines = { ...bulletLineStats(best.view, best.plan.scale, content.jdSkills), shortened };
-  content.changes = { ...content.changes, condensed, lines };
+  const lines = { ...bulletLineStats(view, plan.scale, content.jdSkills), shortened };
+  // How full the page is. Below ~95% with nothing left out = the master resume needs more content.
+  const fill = {
+    pagePercent: Math.min(100, Math.round((usedHeight / PAGE_HEIGHT) * 100)),
+    spacingAdded: +stretch.toFixed(1),
+    everythingIncluded: condensed.bulletsLeftOut + condensed.projectsLeftOut + condensed.extrasLeftOut + condensed.educationLeftOut === 0
+  };
+  content.changes = { ...content.changes, condensed, lines, fill };
 
   return {
-    buffer: best.buffer,
-    pages: best.pages,
-    scale: best.plan.scale,
-    bodyPt: +(FS_BASE.body * best.plan.scale).toFixed(2),
-    trimmed: best.k > 0,
-    rendered: renderedText(best.view),
+    buffer: out.buffer,
+    pages: out.pages,
+    scale: plan.scale,
+    bodyPt: +(FS_BASE.body * plan.scale).toFixed(2),
+    trimmed: !fill.everythingIncluded,
+    rendered: renderedText(view),
     content
   };
+}
+
+/**
+ * Grow a plan one item at a time while it still fits one page.
+ * Priority: experience bullets (latest role first), then projects and their
+ * bullets, then education, certifications/achievements, skills, and finally
+ * a larger font. Bullets are already ranked by JD relevance, so each step adds
+ * the most relevant bullet that was left out.
+ */
+async function refill(start, content, fits) {
+  const nExp = content.experiences.map((e) => e.highlights.length);
+  const nProj = content.projects.map((p) => p.highlights.length);
+  const maxSkillItems = Math.max(0, ...content.skillGroups.map((g) => g.items.length));
+  const steps = (p) => {
+    const out = [];
+    const setAt = (arr, i, v) => arr.map((n, j) => (j === i ? v : n));
+    nExp.forEach((n, i) => { if (p.expCaps[i] < n) out.push({ ...p, expCaps: setAt(p.expCaps, i, p.expCaps[i] + 1) }); });
+    nProj.forEach((n, i) => {
+      if (p.projCaps[i] < 0) out.push({ ...p, projCaps: setAt(p.projCaps, i, Math.min(1, n)) });
+      else if (p.projCaps[i] < n) out.push({ ...p, projCaps: setAt(p.projCaps, i, p.projCaps[i] + 1) });
+    });
+    if (p.eduMax < content.education.length) out.push({ ...p, eduMax: p.eduMax + 1 });
+    if (p.extrasMax < content.extras.length) out.push({ ...p, extrasMax: p.extrasMax + 1 });
+    if (p.skillItemsMax < maxSkillItems) out.push({ ...p, skillItemsMax: Infinity });
+    if (p.scale < 1) out.push({ ...p, scale: Math.min(1, +(p.scale + 0.02).toFixed(4)) });
+    return out;
+  };
+  let plan = start;
+  for (let guard = 0; guard < MAX_REFILL_STEPS; guard++) {
+    let grown = null;
+    for (const next of steps(plan)) {
+      if (await fits(next)) { grown = next; break; }
+    }
+    if (!grown) break;
+    plan = grown;
+  }
+  return plan;
 }
 
 /** Backwards-compatible API used by routes and the email service. Returns a Buffer. */
