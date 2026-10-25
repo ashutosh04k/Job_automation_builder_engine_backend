@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import { buildSearchPlan, parsePostedAgo, sanitizeScannedJob, linkedInSearchUrl } from '../shared/linkedinJobs.js';
 import { PROFILE } from './fixtures.js';
 
-test('search URL asks LinkedIn for the last N days, newest first', () => {
+test('search URL asks LinkedIn for the last N days, with the city in the search text', () => {
   const u = new URL(linkedInSearchUrl('Frontend Developer React', 'Gurugram, Haryana', 3));
-  assert.equal(u.origin + u.pathname, 'https://www.linkedin.com/jobs/search/');
-  assert.equal(u.searchParams.get('keywords'), 'Frontend Developer React');
+  assert.equal(u.origin + u.pathname, 'https://www.linkedin.com/jobs/search-results/');
+  assert.equal(u.searchParams.get('keywords'), 'Frontend Developer React jobs in Gurugram');
   assert.equal(u.searchParams.get('f_TPR'), 'r259200');
-  assert.equal(u.searchParams.get('sortBy'), 'DD');
+  assert.equal(new URL(linkedInSearchUrl('React Developer', '', 1)).searchParams.get('keywords'), 'React Developer');
 });
 
 test('search plan comes from the resume role and its most-used skills', () => {

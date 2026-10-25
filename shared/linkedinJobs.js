@@ -15,15 +15,19 @@ const SEARCH_WORTHY = new Set([
 ]);
 const FOCUS_LABEL = { frontend: 'Frontend Developer', backend: 'Backend Developer', fullstack: 'Full Stack Developer' };
 
-/** LinkedIn job search URL: newest first, posted in the last `days` days. */
+/**
+ * LinkedIn job search URL for jobs posted in the last `days` days.
+ * LinkedIn's current search (/jobs/search-results/) ignores a separate location
+ * parameter, so the city goes into the search text: "React Developer jobs in Gurugram".
+ */
 export function linkedInSearchUrl(keywords = '', location = '', days = DEFAULT_DAYS) {
+  const city = String(location).split(',')[0].trim();
+  const kw = String(keywords).trim();
   const p = new URLSearchParams({
-    keywords: String(keywords).trim(),
-    location: String(location).trim(),
-    f_TPR: `r${Math.max(1, Math.round(days)) * 86400}`,
-    sortBy: 'DD'
+    keywords: city ? `${kw} jobs in ${city}` : kw,
+    f_TPR: `r${Math.max(1, Math.round(days)) * 86400}`
   });
-  return `https://www.linkedin.com/jobs/search/?${p.toString()}`;
+  return `https://www.linkedin.com/jobs/search-results/?${p.toString()}`;
 }
 
 /**
