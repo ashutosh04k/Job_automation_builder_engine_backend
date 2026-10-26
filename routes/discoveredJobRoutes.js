@@ -14,6 +14,27 @@ import { buildSearchPlan, sanitizeScannedJob, MIN_JD_FOR_SCORE, DEFAULT_DAYS } f
 
 const MAX_BATCH = 60;
 
+// Background scoring, one queue per user so a user's batches don't run in parallel.
+const scoringQueues = new Map();
+function queueScoring(userId, jobs) {
+  if (!jobs.length) return;
+  const key = String(userId || 'none');
+  const prev = scoringQueues.get(key) || Promise.resolve();
+  const next = prev.then(async () => {
+    const master = await getMasterResume(userId);
+    for (const job of jobs) {
+      try {
+        const s = await scoreJob(master, job);
+        await saveDiscoveredJobsBatch([{ ...job, ...s }], userId); // upsert keeps the job's status
+      } catch (err) {
+        console.warn(`[Discovered Jobs] scoring ${job.jobId} failed:`, err.message);
+      }
+    }
+  }).catch((err) => console.warn('[Discovered Jobs] scoring run failed:', err.message))
+    .finally(() => { if (scoringQueues.get(key) === next) scoringQueues.delete(key); });
+  scoringQueues.set(key, next);
+}
+
 /** Score a job against the master resume, only when it has a real description. */
 async function scoreJob(master, job) {
   if ((job.jobDescription || '').length < MIN_JD_FOR_SCORE) return { atsScore: null, missingSkills: [] };
@@ -101,26 +122,23 @@ router.post('/batch', async (req, res) => {
       return res.status(400).json({ success: false, error: 'None of these looked like LinkedIn jobs (missing job ID or title).' });
     }
 
+    // Save right away, score afterwards: scoring a job builds its tailored PDF
+    // (a few seconds each on a small server), so 25 jobs would keep the
+    // extension waiting for minutes and fail if its popup closes.
     const userId = req.userId || null;
-    const master = await getMasterResume(userId);
-    const scored = [];
-    for (const job of clean) scored.push({ ...job, ...(await scoreJob(master, job)) });
-    const result = await saveDiscoveredJobsBatch(scored, userId);
-
-    const top = scored
-      .filter((j) => typeof j.atsScore === 'number')
-      .sort((a, b) => b.atsScore - a.atsScore)
-      .slice(0, 5)
-      .map((j) => ({ jobId: j.jobId, title: j.title, company: j.company, atsScore: j.atsScore }));
-    const unscored = scored.filter((j) => j.atsScore === null).length;
+    const result = await saveDiscoveredJobsBatch(clean, userId);
+    const toScore = clean.filter((j) => j.jobDescription.length >= MIN_JD_FOR_SCORE);
+    res.on('finish', () => queueScoring(userId, toScore)); // start after the reply is sent
 
     return res.json({
       success: true,
-      message: `Saved ${result.totalCount} job(s): ${result.insertedCount} new, ${result.updatedCount} updated.${unscored ? ` ${unscored} had no full description and are not scored.` : ''}`,
+      message: `Saved ${result.totalCount} job(s) to your portal (${result.insertedCount} new, ${result.updatedCount} updated). `
+        + (toScore.length ? `Scoring ${toScore.length} against your resume now; scores appear in the portal within a few minutes.` : 'None had a full description to score.'),
       ...result,
       skipped: jobs.length - clean.length,
-      unscored,
-      top
+      scoring: toScore.length,
+      unscored: clean.length - toScore.length,
+      top: []
     });
   } catch (err) {
     console.error('[Discovered Jobs Batch Error]:', err.message);

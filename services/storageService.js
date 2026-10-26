@@ -842,7 +842,9 @@ export async function saveDiscoveredJobsBatch(jobs = [], userId = null) {
     const idx = local.findIndex(j => j.jobId === item.jobId && (!userId || String(j.userId) === String(userId)));
     if (idx >= 0) {
       local[idx] = { ...local[idx], ...item };
+      if (!isMongoConnected()) updatedCount++;
     } else {
+      if (!isMongoConnected()) insertedCount++;
       local.unshift({
         _id: 'dj_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
         status: 'new',
