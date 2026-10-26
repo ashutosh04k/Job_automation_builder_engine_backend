@@ -333,7 +333,8 @@ router.post('/score', requireAuth, async (req, res) => {
 
     const master = await getMasterResume(req.userId);
     const { report } = await tailorAndScore(master, { jobDescription, targetRole, companyName });
-    res.json({ success: true, data: report });
+    // addTargets: roles/projects the "Add missing" panel can put a new bullet under
+    res.json({ success: true, data: { ...report, addTargets: additionTargets(master) } });
   } catch (err) {
     res.status(isProfileError(err) ? 400 : 500).json({ success: false, error: err.message });
   }
@@ -439,7 +440,7 @@ router.get('/score/target/:targetId', requireAuth, async (req, res) => {
     if (report.score !== target.atsScore) {
       await updateJobTarget(target._id, { atsScore: report.score }, req.userId);
     }
-    res.json({ success: true, data: report });
+    res.json({ success: true, data: { ...report, addTargets: additionTargets(master) } });
   } catch (err) {
     res.status(isProfileError(err) ? 400 : 500).json({ success: false, error: err.message });
   }
