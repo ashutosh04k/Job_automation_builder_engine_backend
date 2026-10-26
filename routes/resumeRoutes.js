@@ -14,6 +14,8 @@ import { resolveRole, resolveCompany } from '../shared/jobMeta.js';
 import { isPrimaryUser } from '../shared/owner.js';
 import { tailorAndScore, rescoreUserTargets } from '../services/atsService.js';
 import { applyAdditions, additionTargets } from '../shared/resumeAdditions.js';
+import { buildCoverLetter, parseCoverLetterText } from '../shared/coverLetter.js';
+import { renderCoverLetterPdf } from '../services/coverLetterPdf.js';
 
 const router = express.Router();
 
@@ -367,6 +369,38 @@ router.post('/tailor', requireAuth, async (req, res) => {
     });
   } catch (err) {
     res.status(isProfileError(err) ? 400 : 500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/resume/cover-letter
+ * Body: { jobDescription, targetRole, companyName, text? }
+ * Builds a one-page cover letter from the master resume for this job (nothing invented).
+ * Pass `text` (the user's edited version) to get a PDF of that text instead.
+ */
+router.post('/cover-letter', requireAuth, async (req, res) => {
+  try {
+    let { jobDescription = '', targetRole = '', companyName = '', text = '' } = req.body || {};
+    if (String(jobDescription).length > 50000 || String(text).length > 8000) {
+      return res.status(413).json({ success: false, error: 'Job description or letter text is too long.' });
+    }
+    const master = await getMasterResume(req.userId);
+    if (!master?.fullName) return res.status(400).json({ success: false, error: 'Set up your master resume first.' });
+    targetRole = resolveRole(targetRole, jobDescription, master?.title || 'Software Developer');
+    companyName = resolveCompany(companyName, jobDescription);
+
+    const letter = buildCoverLetter(master, { jobDescription, targetRole, companyName });
+    const finalText = String(text).trim() ? String(text).trim() : letter.text;
+    const pdf = await renderCoverLetterPdf(master, { date: letter.date, paragraphs: parseCoverLetterText(finalText).paragraphs });
+    const slug = (v) => String(v || '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const filename = [slug(master.fullName) || 'Cover', 'Cover_Letter', slug(companyName)].filter(Boolean).join('_') + '.pdf';
+
+    res.json({
+      success: true,
+      data: { text: finalText, matchedSkills: letter.matchedSkills, targetRole, companyName, filename, pdfBase64: pdf.toString('base64') }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
