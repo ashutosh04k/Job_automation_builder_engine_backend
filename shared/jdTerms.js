@@ -63,27 +63,62 @@ const has = (text, needle) => (needle.length <= 4 || !/^[a-z]+$/.test(needle)
   ? hasTerm(text, needle)
   : text.toLowerCase().includes(needle)); // prefix match for stems like "collaborat"
 
-/** Uppercase terms in the JD we don't otherwise know (XSS, SDK, GDPR...). */
-export function unknownAcronyms(jd = '') {
+// Ordinary words that job sites print in CAPITALS on buttons, menus and headings
+// ("APPLY NOW", "SIGN IN", "SAVED JOBS", "LEARN MORE"). Never skills.
+const PLAIN_WORDS = new Set(`
+  A AN AS AT BE BY DO GO IF IN IS IT MY NO OF ON OR SO TO UP US WE
+  ALL AND ANY ARE BUT CAN FOR GET HAS HER HIM HIS HOW ITS LET MAY NEW NOT NOW OFF ONE OUR OUT OWN PAY PER SEE SHE THE TOP TRY TWO USE WAY WHO WHY YES YET YOU
+  ALSO BACK BEST CALL CITY DATE DAYS EACH EASY ELSE FIND FROM FULL GIVE GOOD HELP HERE HOME INFO INTO JOB JOBS JOIN JUST LAST LIKE LIST LIVE LOAD LOG LOGIN
+  LOOK MAIN MAKE MANY MENU MORE MOST MUCH MUST NAME NEAR NEED NEWS NEXT ONLY OPEN OVER PAGE PART PLAN PLUS POST READ ROLE SAVE SEND SHOW SIGN SITE SKIP SOON
+  SUCH TAKE TERM TEXT THAN THAT THEM THEN THEY THIS TIME TYPE VIEW WANT WELL WERE WHAT WHEN WILL WITH WORK YEAR YEARS YOUR ZERO
+  ABOUT ABOVE AFTER AGAIN ALERT APPLY BELOW CHECK CLEAR CLICK CLOSE EMAIL ENTER EVERY FIRST GROUP GUIDE INDIA LEARN LEVEL LOCAL MONTH NEVER OFFER OFTEN OTHER
+  PRINT PRIOR RESET RIGHT SAVED SHARE SHIFT SKILL SINCE START STATE STUDY THEIR THERE THESE THINK THOSE TODAY UNDER UNTIL VALUE WHERE WHICH WHILE WOMEN WORLD
+  ACCEPT ACCESS ALERTS CAREER CENTER CHANGE COOKIE CREATE DETAIL FILTER FOLLOW GLOBAL HYBRID LOCATE MOBILE NEWEST ONLINE ONSITE OPTION PEOPLE POLICY
+  PRIVACY REJECT REMOTE RESUME RETURN SEARCH SELECT SIGNUP SORTBY SUBMIT SUPPORT UPDATE UPLOAD CAREERS CONTACT FEATURED
+`.trim().split(/\s+/));
+
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The JD also uses this word in normal case ("Join us", "jobs"), so in capitals it is a label, not an acronym. */
+const usedAsWord = (text, t) => [...text.matchAll(new RegExp(`(?<![A-Za-z0-9])${escapeRe(t)}(?![A-Za-z0-9])`, 'gi'))]
+  .some((m) => m[0] !== t);
+
+/** A short line written entirely in capitals with 2+ words is a button, menu or heading ("SAVED JOBS", "APPLY NOW"). */
+const isShoutyLine = (line) => !/[a-z]/.test(line) && (line.match(/[A-Z]{2,}/g) || []).length >= 2 && line.trim().split(/\s+/).length <= 8;
+
+/**
+ * Uppercase terms in the JD we don't otherwise know (XSS, SDK, GDPR...).
+ * Skips plain words in capitals, button/menu lines and the company's own name.
+ * @param {string} jd
+ * @param {{ companyName?: string }} [opts]
+ */
+export function unknownAcronyms(jd = '', { companyName = '' } = {}) {
   const found = new Set();
+  const original = String(jd);
   // Blank out known skills first, so "CI/CD" does not also yield "CI" and "CD".
-  let text = String(jd);
+  let text = original;
   for (const sp of findSkillSpans(text)) text = text.slice(0, sp.start) + ' '.repeat(sp.end - sp.start) + text.slice(sp.end);
-  for (const m of text.matchAll(/(?<![A-Za-z0-9])([A-Z][A-Z0-9]{1,5})(?![A-Za-z0-9])/g)) {
-    const t = m[1];
-    if (ACRONYM_STOP.has(t) || /^\d/.test(t)) continue;
-    const low = t.toLowerCase();
-    if (KNOWN_ALIASES.has(low) || conceptAlias.has(low) || extractSkills(t).length) continue;
-    found.add(t);
+  const company = new Set(String(companyName).toUpperCase().split(/[^A-Z0-9]+/).filter((w) => w.length >= 2));
+  for (const line of text.split(/\n/)) {
+    if (isShoutyLine(line)) continue;
+    for (const m of line.matchAll(/(?<![A-Za-z0-9])([A-Z][A-Z0-9]{1,5})(?![A-Za-z0-9])/g)) {
+      const t = m[1];
+      if (ACRONYM_STOP.has(t) || PLAIN_WORDS.has(t) || company.has(t) || /^\d/.test(t)) continue;
+      const low = t.toLowerCase();
+      if (KNOWN_ALIASES.has(low) || conceptAlias.has(low) || extractSkills(t).length) continue;
+      if (usedAsWord(original, t)) continue;
+      found.add(t);
+    }
   }
   return [...found];
 }
 
 /**
  * JD terms beyond named tools, each with whether the resume shows it.
+ * @param {{ companyName?: string }} [opts]  the company's own name is never a missing skill
  * @returns {{ concepts: {label,matched}[], soft: {label,matched}[], acronyms: {label,matched}[] }}
  */
-export function matchJdTerms(jd = '', resumeText = '') {
+export function matchJdTerms(jd = '', resumeText = '', { companyName = '' } = {}) {
   const jdText = String(jd || '');
   const res = String(resumeText || '');
   const check = (list) => list
@@ -92,7 +127,7 @@ export function matchJdTerms(jd = '', resumeText = '') {
   return {
     concepts: check(CONCEPTS),
     soft: check(SOFT_SKILLS),
-    acronyms: unknownAcronyms(jdText).map((t) => ({ label: t, matched: hasTerm(res, t.toLowerCase()) }))
+    acronyms: unknownAcronyms(jdText, { companyName }).map((t) => ({ label: t, matched: hasTerm(res, t.toLowerCase()) }))
   };
 }
 

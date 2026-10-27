@@ -224,7 +224,7 @@ const pct = (n) => Math.max(0, Math.min(100, Math.round(n)));
  * @param {{ email?: string, phone?: string, linkedin?: string, experience?: object[] }} p.profile
  * @param {{ pages: number, bodyPt: number, trimmed: boolean }} p.pdf
  */
-export function scoreResume({ jobDescription = '', targetRole = '', resume, profile = {}, pdf = {} }) {
+export function scoreResume({ jobDescription = '', targetRole = '', companyName = '', resume, profile = {}, pdf = {} }) {
   if (!String(jobDescription).trim() && !String(targetRole).trim()) {
     return { score: null, reason: 'Add a job description to get a match score.', version: SCORER_VERSION };
   }
@@ -254,7 +254,7 @@ export function scoreResume({ jobDescription = '', targetRole = '', resume, prof
   const keywordScore = totalWeight ? pct((gotWeight / totalWeight) * 100) : null;
 
   // --- other JD terms + soft skills --------------------------------------------
-  const terms = matchJdTerms(jobDescription, resume.full);
+  const terms = matchJdTerms(jobDescription, resume.full, { companyName });
   const otherTerms = [...terms.concepts, ...terms.acronyms];
   const termScore = otherTerms.length ? pct((otherTerms.filter((t) => t.matched).length / otherTerms.length) * 100) : null;
   const softScore = terms.soft.length ? pct((terms.soft.filter((t) => t.matched).length / terms.soft.length) * 100) : null;

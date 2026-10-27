@@ -14,6 +14,7 @@ export async function tailorAndScore(masterResume, { jobDescription = '', target
   const report = scoreResume({
     jobDescription,
     targetRole,
+    companyName,
     resume: result.rendered,
     profile: { email: m.email, phone: m.phone, linkedin: m.linkedin, experience: m.experience },
     pdf: { pages: result.pages, bodyPt: result.bodyPt, trimmed: result.trimmed }
