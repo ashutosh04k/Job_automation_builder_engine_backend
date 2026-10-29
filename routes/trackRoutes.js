@@ -1,7 +1,9 @@
 import express from 'express';
-import mongoose from 'mongoose';
-import JobTarget from '../models/JobTarget.js';
-import { createLogEntry, isMongoConnected } from '../services/storageService.js';
+import { 
+  getJobTargetById, 
+  updateJobTarget, 
+  createLogEntry 
+} from '../services/storageService.js';
 
 const router = express.Router();
 
@@ -23,47 +25,47 @@ router.get('/open/:targetId', async (req, res) => {
     const clientIp = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
     const userAgent = req.headers['user-agent'] || 'Unknown client';
 
-    // Set anti-caching headers so every email open hits this endpoint
+    // Set anti-caching & cross-origin headers so every email open hits this endpoint without CORP blocks
     res.set({
       'Content-Type': 'image/png',
       'Content-Length': TRANSPARENT_PNG.length,
       'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
       'Pragma': 'no-cache',
       'Expires': '0',
-      'X-Content-Type-Options': 'nosniff'
+      'X-Content-Type-Options': 'nosniff',
+      'Access-Control-Allow-Origin': '*',
+      'Cross-Origin-Resource-Policy': 'cross-origin'
     });
 
-    if (isMongoConnected() && mongoose.Types.ObjectId.isValid(cleanTargetId)) {
-      const target = await JobTarget.findById(cleanTargetId);
+    const target = await getJobTargetById(cleanTargetId);
 
-      if (target) {
-        const isFirstOpen = !target.isOpened;
-        const newCount = (target.openCount || 0) + 1;
+    if (target) {
+      const newCount = (target.openCount || 0) + 1;
+      const now = new Date();
 
-        target.isOpened = true;
-        if (!target.openedAt) target.openedAt = new Date();
-        target.lastOpenedAt = new Date();
-        target.openCount = newCount;
-        target.lastOpenedIp = clientIp;
-        target.lastOpenedUserAgent = userAgent;
+      await updateJobTarget(cleanTargetId, {
+        isOpened: true,
+        openedAt: target.openedAt || now,
+        lastOpenedAt: now,
+        openCount: newCount,
+        lastOpenedIp: clientIp,
+        lastOpenedUserAgent: userAgent
+      }, target.userId || null);
 
-        await target.save();
+      // Create an audit log record for the recruiter's open event
+      await createLogEntry(
+        {
+          targetId: target._id,
+          recipientEmail: target.email,
+          jobDescriptionSnippet: `Role: ${target.targetRole} @ ${target.companyName}`,
+          status: 'opened',
+          triggeredBy: 'recruiter',
+          details: `🎉 Recruiter opened email! (Total opens: ${newCount}) [Client: ${userAgent.substring(0, 50)}]`
+        },
+        target.userId || null
+      );
 
-        // Create an audit log record for the recruiter's open event
-        await createLogEntry(
-          {
-            targetId: target._id,
-            recipientEmail: target.email,
-            jobDescriptionSnippet: `Role: ${target.targetRole} @ ${target.companyName}`,
-            status: 'opened',
-            triggeredBy: 'recruiter',
-            details: `🎉 Recruiter opened email! (Total opens: ${newCount}) [Client: ${userAgent.substring(0, 50)}]`
-          },
-          target.userId || null
-        );
-
-        console.log(`[Email Tracker] Open recorded for target ${target.email} (Open #${newCount}) from IP: ${clientIp}`);
-      }
+      console.log(`[Email Tracker] Open recorded for target ${target.email} (Open #${newCount}) from IP: ${clientIp}`);
     }
 
     return res.end(TRANSPARENT_PNG);
@@ -94,29 +96,34 @@ router.get('/click/:targetId', async (req, res) => {
   }
 
   try {
-    if (isMongoConnected() && mongoose.Types.ObjectId.isValid(cleanTargetId)) {
-      const target = await JobTarget.findById(cleanTargetId);
+    const target = await getJobTargetById(cleanTargetId);
 
-      if (target) {
-        const newClicks = (target.clickCount || 0) + 1;
-        target.clickedAt = new Date();
-        target.clickCount = newClicks;
-        await target.save();
+    if (target) {
+      const newClicks = (target.clickCount || 0) + 1;
+      const now = new Date();
 
-        await createLogEntry(
-          {
-            targetId: target._id,
-            recipientEmail: target.email,
-            jobDescriptionSnippet: `Role: ${target.targetRole} @ ${target.companyName}`,
-            status: 'clicked',
-            triggeredBy: 'recruiter',
-            details: `🔥 Recruiter clicked portfolio/resume link! (${destination})`
-          },
-          target.userId || null
-        );
+      await updateJobTarget(cleanTargetId, {
+        isOpened: true, // A link click confirms the email was opened
+        openedAt: target.openedAt || now,
+        lastOpenedAt: target.lastOpenedAt || now,
+        openCount: target.openCount || 1,
+        clickedAt: now,
+        clickCount: newClicks
+      }, target.userId || null);
 
-        console.log(`[Link Tracker] Click recorded for target ${target.email} -> ${destination}`);
-      }
+      await createLogEntry(
+        {
+          targetId: target._id,
+          recipientEmail: target.email,
+          jobDescriptionSnippet: `Role: ${target.targetRole} @ ${target.companyName}`,
+          status: 'clicked',
+          triggeredBy: 'recruiter',
+          details: `🔥 Recruiter clicked portfolio/resume link! (${destination})`
+        },
+        target.userId || null
+      );
+
+      console.log(`[Link Tracker] Click recorded for target ${target.email} -> ${destination}`);
     }
   } catch (err) {
     console.error('[Link Tracker Error]:', err.message);

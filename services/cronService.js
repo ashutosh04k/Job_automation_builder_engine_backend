@@ -49,11 +49,18 @@ export async function processTargetExecution(target, triggeredBy = 'cron', { fol
     tailoredData.jobDescription = target.jobDescription || '';
     tailoredData.companyName = company;
 
-    const apiBase = process.env.API_BASE_URL || '';
+    const apiBase = (process.env.API_BASE_URL || process.env.RENDER_EXTERNAL_URL || 'https://resume-backend-api-pvx4.onrender.com').replace(/\/+$/, '');
     let html = tailoredData.htmlTemplate || '';
-    if (apiBase) {
-      const pixel = `<img src="${apiBase}/api/track/open/${target._id}.png" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;margin:0;padding:0;" />`;
+    if (apiBase && target?._id) {
+      const pixel = `<img src="${apiBase}/api/track/open/${target._id}.png" width="1" height="1" border="0" alt="" style="width:1px!important;height:1px!important;min-width:1px;min-height:1px;border:0;outline:none;display:block;" />`;
       html = html.includes('</body>') ? html.replace('</body>', `${pixel}</body>`) : html + pixel;
+
+      // Wrap external links in click tracking so clicking portfolio/LinkedIn also records the email open
+      html = html.replace(/<a\s+([^>]*?)href="((?!mailto:)[^"]+)"([^>]*)>/gi, (match, prefix, url, suffix) => {
+        if (url.includes('/api/track/click/')) return match;
+        const trackedUrl = `${apiBase}/api/track/click/${target._id}?url=${encodeURIComponent(url)}`;
+        return `<a ${prefix}href="${trackedUrl}"${suffix}>`;
+      });
     }
 
     const result = await sendTailoredResumeEmail({

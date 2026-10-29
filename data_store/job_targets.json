@@ -107,9 +107,13 @@
     "totalSentCount": 7,
     "status": "active",
     "createdAt": "2026-10-13T11:51:25.406Z",
-    "updatedAt": "2026-10-14T03:30:13.882Z",
+    "updatedAt": "2026-10-29T06:19:40.930Z",
     "__v": 0,
-    "userId": "6acf10019a7a3ac619233f9b"
+    "userId": "6acf10019a7a3ac619233f9b",
+    "isOpened": true,
+    "openCount": 2,
+    "openedAt": "2026-10-29T06:18:22.955Z",
+    "lastOpenedAt": "2026-10-29T06:19:40.929Z"
   },
   {
     "_id": "6ace1b3d2fbb434fe6077b3c",
@@ -123,9 +127,15 @@
     "totalSentCount": 6,
     "status": "active",
     "createdAt": "2026-10-13T11:51:25.202Z",
-    "updatedAt": "2026-10-15T03:30:12.082Z",
+    "updatedAt": "2026-10-29T06:19:40.932Z",
     "__v": 0,
-    "userId": "6acf10019a7a3ac619233f9b"
+    "userId": "6acf10019a7a3ac619233f9b",
+    "isOpened": true,
+    "openCount": 1,
+    "openedAt": "2026-10-29T06:18:22.955Z",
+    "lastOpenedAt": "2026-10-29T06:19:40.931Z",
+    "clickedAt": "2026-10-29T06:19:40.931Z",
+    "clickCount": 1
   },
   {
     "_id": "6acc48fe233b1397ca706db4",
