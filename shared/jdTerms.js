@@ -58,6 +58,9 @@ const ACRONYM_STOP = new Set([
 ]);
 const KNOWN_ALIASES = new Set(SKILLS.flatMap((s) => s.aliases.map((a) => a.toLowerCase())));
 const conceptAlias = new Set([...CONCEPTS, ...SOFT_SKILLS].flatMap((c) => c.jd.map((a) => a.toLowerCase())));
+// Words inside a known practice ("e2e" in "e2e testing"): already scored as that practice.
+const conceptWords = new Set([...CONCEPTS, ...SOFT_SKILLS].flatMap((c) => [c.label, ...c.jd])
+  .flatMap((a) => a.toLowerCase().split(/[^a-z0-9]+/)).filter((w) => w.length >= 2));
 
 const has = (text, needle) => (needle.length <= 4 || !/^[a-z]+$/.test(needle)
   ? hasTerm(text, needle)
@@ -105,7 +108,7 @@ export function unknownAcronyms(jd = '', { companyName = '' } = {}) {
       const t = m[1];
       if (ACRONYM_STOP.has(t) || PLAIN_WORDS.has(t) || company.has(t) || /^\d/.test(t)) continue;
       const low = t.toLowerCase();
-      if (KNOWN_ALIASES.has(low) || conceptAlias.has(low) || extractSkills(t).length) continue;
+      if (KNOWN_ALIASES.has(low) || conceptAlias.has(low) || conceptWords.has(low) || extractSkills(t).length) continue;
       if (usedAsWord(original, t)) continue;
       found.add(t);
     }

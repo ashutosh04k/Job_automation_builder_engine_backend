@@ -60,7 +60,7 @@ export function splitRoleCompany(text = '') {
 function takePeriod(text) {
   const t = text.replace(/\t/g, '  ');
   const m = t.match(RANGE_RE);
-  if (m) return { period: clean(m[0]).replace(/\s*(?:-|–|—|to)\s*/i, ' - '), rest: clean(t.replace(m[0], ' ').replace(/[|,–—-]\s*$/, '')) };
+  if (m) return { period: clean(m[0]).replace(/\s*(?:-|–|—|\bto\b)\s*/i, ' - '), rest: clean(t.replace(m[0], ' ').replace(/[|,–—-]\s*$/, '')) };
   return { period: '', rest: clean(t) };
 }
 

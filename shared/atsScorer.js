@@ -18,9 +18,9 @@
 // the number as "how well this resume covers this JD", with the details shown.
 
 import { extractSkills, findSkillSpans } from './keywords.js';
-import { matchJdTerms } from './jdTerms.js';
+import { matchJdTerms, CONCEPTS } from './jdTerms.js';
 
-export const SCORER_VERSION = 3;
+export const SCORER_VERSION = 4;
 
 const WEIGHTS = {
   hardSkills: 40, jdTerms: 15, softSkills: 5, title: 10, experience: 10, education: 5, impact: 10, format: 5
@@ -104,9 +104,21 @@ export function analyzeJobDescription(jobDescription = '', targetRole = '') {
     return out;
   };
 
+  // How much each skill matters to THIS job: named in the job title, or repeated
+  // across the JD, counts more than a tool mentioned once in passing.
+  const mentions = new Map();
+  for (const sp of findSkillSpans(jd)) mentions.set(sp.skill, (mentions.get(sp.skill) || 0) + 1);
+  const titleSkills = new Set(extractSkills(targetRole));
+  const importance = new Map([...required, ...preferred].map((s) => {
+    const n = mentions.get(s) || 0;
+    return [s, 1 + (titleSkills.has(s) ? 0.5 : 0) + (n >= 3 ? 0.5 : n === 2 ? 0.25 : 0)];
+  }));
+
   return {
     required,
     preferred,
+    mentions,
+    importance,
     requiredGroups: toGroups(required),
     preferredGroups: toGroups(preferred),
     requiredYears: parseRequiredYears(jd),
@@ -166,7 +178,7 @@ function parseMonth(token = '', isEnd = false) {
 export function resumeYears(experience = []) {
   const ranges = [];
   for (const e of experience || []) {
-    const [a, b] = String(e?.period || '').split(/\s*(?:-|–|—|to)\s*/i);
+    const [a, b] = String(e?.period || '').split(/\s*(?:-|–|—|\bto\b)\s*/i);
     const start = parseMonth(a || '');
     const end = parseMonth(b || '', true) ?? start;
     if (start !== null && end !== null && end >= start) ranges.push([start, end + 1]);
@@ -215,6 +227,31 @@ function titleTerms(role = '') {
 
 const pct = (n) => Math.max(0, Math.min(100, Math.round(n)));
 
+// Bullets that open with a duty instead of an achievement read weak to recruiters.
+const WEAK_START = /^(?:worked (?:on|with)|responsible for|helped|assisted(?: in| with)?|involved in|participated in|was part of|part of|tasked with|duties included|handled|did|made|used|working on)\b/i;
+
+/**
+ * For each missing (or Skills-list-only) JD keyword: how many points the score would
+ * gain if it were shown in a bullet, or added to the Skills list. Computed by re-scoring
+ * this same resume with the term added, so it follows the real formula exactly.
+ */
+function keywordOpportunities(args, base, rows) {
+  const sample = (term) => {
+    const c = CONCEPTS.find((x) => x.label === term);
+    return c ? c.resume[0] : term;
+  };
+  const sim = (extra) => scoreResume({ ...args, resume: extra, _simulate: true }).scoreExact;
+  const r = args.resume;
+  return rows.map(({ term, kind }) => {
+    const text = sample(term);
+    // Added to an existing bullet, so the gain is the keyword's alone (bullet count unchanged).
+    const bullets = r.bullets.length ? [`${r.bullets[0]} ${text}`, ...r.bullets.slice(1)] : [text];
+    const asBullet = sim({ ...r, bullets, full: `${r.full}\n${text}` }) - base;
+    const asSkill = kind === 'Skills list only' ? 0 : sim({ ...r, skills: [...r.skills, text], full: `${r.full}\n${text}` }) - base;
+    return { term, kind, asBullet: Math.max(0, Math.round(asBullet * 10) / 10), asSkill: Math.max(0, Math.round(asSkill * 10) / 10) };
+  }).sort((a, b) => b.asBullet - a.asBullet || b.asSkill - a.asSkill);
+}
+
 /**
  * @param {object} p
  * @param {string} p.jobDescription
@@ -224,7 +261,7 @@ const pct = (n) => Math.max(0, Math.min(100, Math.round(n)));
  * @param {{ email?: string, phone?: string, linkedin?: string, experience?: object[] }} p.profile
  * @param {{ pages: number, bodyPt: number, trimmed: boolean }} p.pdf
  */
-export function scoreResume({ jobDescription = '', targetRole = '', companyName = '', resume, profile = {}, pdf = {} }) {
+export function scoreResume({ jobDescription = '', targetRole = '', companyName = '', resume, profile = {}, pdf = {}, _simulate = false }) {
   if (!String(jobDescription).trim() && !String(targetRole).trim()) {
     return { score: null, reason: 'Add a job description to get a match score.', version: SCORER_VERSION };
   }
@@ -248,9 +285,24 @@ export function scoreResume({ jobDescription = '', targetRole = '', companyName 
     .map((s) => s.label);
 
   const groupCredit = (g) => Math.max(...g.map(credit));
-  const totalWeight = jd.requiredGroups.length * REQUIRED_WEIGHT + jd.preferredGroups.length * PREFERRED_WEIGHT;
-  const gotWeight = jd.requiredGroups.reduce((n, g) => n + groupCredit(g) * REQUIRED_WEIGHT, 0)
-    + jd.preferredGroups.reduce((n, g) => n + groupCredit(g) * PREFERRED_WEIGHT, 0);
+  // Required 2x, nice-to-have 1x, times how important the JD makes it (title / repeated: up to 2x).
+  const groupWeight = (g, base) => base * Math.max(...g.map((s) => jd.importance.get(s) || 1));
+  const weighted = [
+    ...jd.requiredGroups.map((g) => ({ g, w: groupWeight(g, REQUIRED_WEIGHT), required: true })),
+    ...jd.preferredGroups.map((g) => ({ g, w: groupWeight(g, PREFERRED_WEIGHT), required: false }))
+  ];
+  const totalWeight = weighted.reduce((n, x) => n + x.w, 0);
+  const gotWeight = weighted.reduce((n, x) => n + groupCredit(x.g) * x.w, 0);
+  // The JD's keywords, most important first, with where the resume shows them.
+  const priority = weighted
+    .map(({ g, w, required: req }) => ({
+      term: groupLabel(g),
+      required: req,
+      weight: Math.round(w * 100) / 100,
+      jdMentions: Math.max(...g.map((s) => jd.mentions.get(s) || 0)),
+      status: g.some((s) => evidenceSkills.has(s)) ? 'in bullet' : g.some((s) => resumeSkills.has(s)) ? 'skills list only' : 'missing'
+    }))
+    .sort((a, b) => b.weight - a.weight);
   const keywordScore = totalWeight ? pct((gotWeight / totalWeight) * 100) : null;
 
   // --- other JD terms + soft skills --------------------------------------------
@@ -344,7 +396,33 @@ export function scoreResume({ jobDescription = '', targetRole = '', companyName 
     ...p,
     weight: p.score === null ? 0 : Math.round((WEIGHTS[p.key] / wSum) * 100)
   }));
-  const score = pct(measured.reduce((n, p) => n + p.score * WEIGHTS[p.key], 0) / wSum);
+  const scoreExact = measured.reduce((n, p) => n + p.score * WEIGHTS[p.key], 0) / wSum;
+  const score = pct(scoreExact);
+  if (_simulate) return { score, scoreExact };
+
+  // Which missing keywords would raise this score the most (each one split out of "A / B").
+  const oppRows = [];
+  const seenTerm = new Set();
+  const addRow = (term, kind) => { if (!seenTerm.has(term.toLowerCase())) { seenTerm.add(term.toLowerCase()); oppRows.push({ term, kind }); } };
+  required.missing.forEach((g) => g.split(' / ').forEach((t) => addRow(t, 'Required')));
+  preferred.missing.forEach((g) => g.split(' / ').forEach((t) => addRow(t, 'Nice to have')));
+  otherTerms.filter((t) => !t.matched).forEach((t) => addRow(t.label, 'JD term'));
+  listedOnly.forEach((t) => addRow(t, 'Skills list only'));
+  const opportunities = keywordOpportunities(
+    { jobDescription, targetRole, companyName, profile, pdf, resume }, scoreExact, oppRows.slice(0, 25)
+  );
+
+  // Bullets that start with a duty ("Worked on…") or show no result.
+  const weakBullets = bullets
+    .map((text) => ({
+      text,
+      reasons: [
+        WEAK_START.test(text.trim()) && 'starts with a duty, not an action verb',
+        !(HAS_RESULT.test(text) && !isYearOnly(text)) && 'no measurable result'
+      ].filter(Boolean)
+    }))
+    .filter((b) => b.reasons.length === 2 || b.reasons[0]?.startsWith('starts'))
+    .slice(0, 5);
 
   // --- suggestions (never "add a skill you don't have") ----------------------
   const suggestions = [];
@@ -380,6 +458,14 @@ export function scoreResume({ jobDescription = '', targetRole = '', companyName 
       ? `"${notInRoles.join(', ')}" is only in your headline. If a past role really was that (e.g. Software Developer (Frontend)), name it that way in Master Resume.`
       : `Title terms not on your resume: ${wanted.filter((w) => !titleHits.includes(w)).join(', ')}.`);
   }
+  const top = opportunities.filter((o) => o.asBullet >= 1).slice(0, 3);
+  if (top.length) {
+    suggestions.unshift(`Biggest gains: ${top.map((o) => `${o.term} (+${Math.round(o.asBullet)} in a bullet)`).join(', ')}. Add only what you have really done, using "Add missing skills".`);
+  }
+  if (weakBullets.some((b) => b.reasons[0]?.startsWith('starts'))) {
+    suggestions.push('Some bullets start with a duty ("Worked on…", "Responsible for…"). Start with what you did (Built, Reduced, Led) and end with the result.');
+  }
+
   checks.filter((c) => !c.passed).forEach((c) => suggestions.push(`Format: ${c.label.toLowerCase()} — currently failing.`));
   if (pdf.trimmed) {
     suggestions.push('Some lower-ranked bullets were left out to keep one page. They are the ones least related to this JD.');
@@ -396,7 +482,8 @@ export function scoreResume({ jobDescription = '', targetRole = '', companyName 
     confidence,
     label: score >= 80 ? 'Strong' : score >= 65 ? 'Good' : score >= 50 ? 'Fair' : 'Low',
     breakdown,
-    keywords: { required, preferred, listedOnly, terms: split(otherTerms), soft: split(terms.soft) },
+    keywords: { required, preferred, listedOnly, priority, opportunities, terms: split(otherTerms), soft: split(terms.soft) },
+    weakBullets,
     impact: { withResult, bullets: bullets.length },
     experience: { requiredYears: jd.requiredYears, resumeYears: haveYears },
     checks: checks.map(({ weight, ...c }) => c),

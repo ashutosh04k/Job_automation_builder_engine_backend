@@ -3,6 +3,9 @@ import {
   extractSkills, countMatches, findSkill, detectRoleFocus, highlightSkills, surfaceForm, hasSkill, findSkillSpans
 } from '../shared/keywords.js';
 import { jdConcepts, conceptHits } from '../shared/jdTerms.js';
+import { analyzeJobDescription, weightedYears } from '../shared/atsScorer.js';
+import { honestTitle, titleHasFocus, buildTailoredSummary } from '../shared/resumeSummary.js';
+import { cleanJobDescription } from '../shared/jdClean.js';
 
 /**
  * PDF resume generator (PDFKit).
@@ -276,7 +279,7 @@ function buildSpellingMirror(jd, jdSkills) {
 export function prepareResumeContent(masterResume = {}, tailoredData = {}) {
   const m = masterResume || {};
   const targetRole = tailoredData.targetRole || m.title || 'Software Developer';
-  const jd = tailoredData.jobDescription || '';
+  const jd = cleanJobDescription(tailoredData.jobDescription || ''); // no menus / "Similar jobs" text
   const jdSkills = extractSkills(`${jd} ${targetRole}`);
 
   const experiences = Array.isArray(m.experience) ? m.experience : [];
@@ -319,10 +322,50 @@ export function prepareResumeContent(masterResume = {}, tailoredData = {}) {
   const clean = (list = []) => list.map((t) => mirror(stripMarkers(t))).filter(Boolean);
 
   const provenText = experiences.flatMap((e) => e.highlights || []).join(' ');
-  const focus = detectRoleFocus(targetRole, jd);
+  let focus = detectRoleFocus(targetRole, jd);
+
+  // JD skills, most important first: required before nice-to-have, then named in the
+  // title / repeated in the JD, then the order the JD lists them.
+  const jdInfo = analyzeJobDescription(jd, targetRole);
+  const weightOf = (s) => (jdInfo.required.includes(s) ? 2 : jdInfo.preferred.includes(s) ? 1 : 0.5) * (jdInfo.importance.get(s) || 1);
+  const byImportance = jdSkills.map((s, i) => ({ s, i })).sort((a, b) => weightOf(b.s) - weightOf(a.s) || a.i - b.i).map((x) => x.s);
+
+  // Everything the master resume says (what the summary may draw on).
+  const projectText = projects.flatMap((p) => [...(p.highlights || []), ...(p.technologies || [])]).join(' ');
+  const skillsText = skillGroups.flatMap((g) => g.items || []).join(', ');
+  const allText = [provenText, projectText, skillsText, m.summary || ''].join(' \n ');
+  // Most important JD skills the resume shows (work, projects or Skills list).
+  const summarySkills = byImportance.filter((s) => hasSkill(allText, s));
+  // Headline and summary name the same kind of work: frontend + backend tools on top = full stack.
+  const topGroups = new Set(summarySkills.slice(0, 6).map((s) => s.group));
+  if (topGroups.has('frontend') && topGroups.has('backend')) focus = 'fullstack';
   const focusLabel = { frontend: 'Frontend Developer', backend: 'Backend Developer', fullstack: 'Full Stack Developer' }[focus];
-  const provenJdSkills = jdSkills.filter((s) => countMatches(provenText, [s]) > 0).map((s) => mirror(s.label));
-  const subtitle = ['Software Developer', focusLabel, ...provenJdSkills.slice(0, 5)].join(' | ');
+
+  // Headline: the JD's own job title when it honestly fits ("Frontend Engineer"),
+  // then the JD skills your work experience proves.
+  const jdTitle = jd.trim() ? honestTitle(targetRole, allText) : null;
+  const headTitle = jdTitle || 'Software Developer';
+  const provenJdSkills = byImportance.filter((s) => countMatches(provenText, [s]) > 0);
+  const inTitle = new Set(extractSkills(headTitle));
+  // Tools named in the JD title ("Frontend Engineer (React)") lead, if the resume shows them anywhere.
+  const titleTools = extractSkills(targetRole).filter((s) => !inTitle.has(s) && hasSkill(allText, s));
+  const headSkills = [...new Set([...titleTools, ...provenJdSkills])].filter((s) => !inTitle.has(s));
+  const subtitle = [
+    headTitle,
+    ...(titleHasFocus(headTitle) ? [] : [focusLabel]),
+    ...headSkills.slice(0, 5).map((s) => mirror(s.label))
+  ].join(' | ');
+
+  // Summary: 2 sentences from facts on the resume, in the JD's words.
+  const summary = tailoredData.includeSummary === false ? '' : buildTailoredSummary({
+    title: headTitle,
+    years: weightedYears(experiences),
+    focus,
+    skills: summarySkills,
+    spell: mirror,
+    jd,
+    evidence: [provenText, projects.flatMap((p) => p.highlights || []).join(' '), m.summary || ''].join(' \n ')
+  });
 
   const isJdSkill = (item) => jdSkills.some((s) => hasSkill(item, s)) || jdSkills.includes(findSkill(item));
 
@@ -340,6 +383,7 @@ export function prepareResumeContent(masterResume = {}, tailoredData = {}) {
     m,
     jdSkills,
     subtitle,
+    summary,
     experiences: rankedExperiences,
     projects: rank(projects, (p) => `${p.name || ''} ${(p.technologies || []).join(' ')} ${(p.highlights || []).join(' ')}`)
       .map((p) => ({
@@ -365,6 +409,7 @@ export function prepareResumeContent(masterResume = {}, tailoredData = {}) {
   };
   content.changes = {
     headline: subtitle,
+    summary,
     spelling: mirror.changes(),
     rolesReordered,
     emphasised: jdSkills.map((s) => s.label)
@@ -387,8 +432,9 @@ export function renderedText(content) {
   ];
   const education = content.education.map((e) => [e.degree, e.institution, e.score, e.period].filter(Boolean).join(' '));
   const headline = content.subtitle;
-  const full = [m.fullName, headline, m.location, m.email, m.phone, ...roles, ...bullets, ...skills, ...education].join('\n');
-  return { headline, roles, bullets, skills, education, full };
+  const summary = content.summary || '';
+  const full = [m.fullName, headline, m.location, m.email, m.phone, summary, ...roles, ...bullets, ...skills, ...education].join('\n');
+  return { headline, summary, roles, bullets, skills, education, full };
 }
 
 // ---------------------------------------------------------------------------
@@ -516,6 +562,14 @@ function renderToBuffer(content, { scale, measure = false, stretch = 0 }) {
         cx += doc.widthOfString(s.text);
       });
       doc.y = contactY + doc.currentLineHeight() + SP.addressSkip;
+
+      // -- summary (tailored to the JD) ---------------------------------------
+      if (content.summary) {
+        renderSection('Summary');
+        doc.x = contentX;
+        renderRichText(highlightSkills(content.summary, jdSkills), FS.body, contentWidth);
+        doc.y += SP.entryGap;
+      }
 
       // -- experience -------------------------------------------------------
       renderSection('Experience');

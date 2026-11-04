@@ -2,6 +2,7 @@ import { generateResumePDFWithMeta } from './pdfService.js';
 import { scoreResume } from '../shared/atsScorer.js';
 import { getMasterResume, getJobTargets, updateJobTarget } from './storageService.js';
 import { resolveRole } from '../shared/jobMeta.js';
+import { cleanJobDescription } from '../shared/jdClean.js';
 
 /**
  * Build the tailored resume for this JD and score the text it actually prints.
@@ -9,6 +10,8 @@ import { resolveRole } from '../shared/jobMeta.js';
  * Throws if the master resume is incomplete (callers turn that into a 400).
  */
 export async function tailorAndScore(masterResume, { jobDescription = '', targetRole = '', companyName = '' } = {}) {
+  // Page text copied from a careers site: drop menus, buttons, cookie text and "Similar jobs".
+  jobDescription = cleanJobDescription(jobDescription);
   const result = await generateResumePDFWithMeta(masterResume, { jobDescription, targetRole, companyName });
   const m = result.content.m;
   const report = scoreResume({

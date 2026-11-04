@@ -19,13 +19,15 @@ const GROUP_HINTS = {
   devops: /devops|cloud|infra|tools/i,
   testing: /test|qa/i,
   ai: /\bai\b|ml|machine|llm/i,
+  data: /\bdata\b|analytics|\bbi\b/i,
+  mobile: /mobile|android|ios/i,
   general: /engineering|practices|methodolog|other|general/i
 };
 const FALLBACK_GROUP = 'Additional Skills';
 
 function pickGroup(skills, label) {
   const known = findSkill(label);
-  const hint = GROUP_HINTS[known?.group || 'general'];
+  const hint = GROUP_HINTS[known?.group] || GROUP_HINTS.general;
   return skills.find((g) => hint.test(g.category || ''))
     || skills.find((g) => GROUP_HINTS.general.test(g.category || ''))
     || null;
