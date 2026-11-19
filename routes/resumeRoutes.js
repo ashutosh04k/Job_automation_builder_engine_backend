@@ -16,6 +16,7 @@ import { tailorAndScore, rescoreUserTargets } from '../services/atsService.js';
 import { applyAdditions, additionTargets } from '../shared/resumeAdditions.js';
 import { buildCoverLetter, parseCoverLetterText } from '../shared/coverLetter.js';
 import { renderCoverLetterPdf } from '../services/coverLetterPdf.js';
+import { generateBulletWithGroq } from '../services/groqBulletService.js';
 
 const router = express.Router();
 
@@ -400,6 +401,40 @@ router.post('/cover-letter', requireAuth, async (req, res) => {
       success: true,
       data: { text: finalText, matchedSkills: letter.matchedSkills, targetRole, companyName, filename, pdfBase64: pdf.toString('base64') }
     });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/resume/generate-bullet
+ * Body: { term, target?, targetRole?, companyName?, jobDescription?, apiKey? }
+ * Generates an ATS-optimized 1-line bullet point incorporating `term` via Groq or built-in engine.
+ */
+router.post('/generate-bullet', requireAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const term = String(b.term || '').trim();
+    const target = String(b.target || b.targetKey || '').trim();
+    const targetRole = String(b.targetRole || b.role || '').trim();
+    const companyName = String(b.companyName || b.company || '').trim();
+    const jobDescription = String(b.jobDescription || b.jd || '').trim();
+    const apiKey = String(b.apiKey || b.groqApiKey || '').trim();
+
+    if (!term) {
+      return res.status(400).json({ success: false, error: 'Skill term is required.' });
+    }
+    const master = await getMasterResume(req.userId);
+    const result = await generateBulletWithGroq({
+      master,
+      term,
+      target,
+      targetRole,
+      companyName,
+      jobDescription,
+      apiKey
+    });
+    res.json({ success: true, ...result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
